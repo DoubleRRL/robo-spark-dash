@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import VehicleStatusCard from "@/components/VehicleStatusCard";
 import ActiveTripsCard from "@/components/ActiveTripsCard";
+import LeafletMapComponent from "@/components/LeafletMapComponent";
+import { useSocket } from "@/hooks/useSocket";
+import { generateActiveTrips } from "@/utils/riderData";
 import {
   Car,
   DollarSign,
@@ -17,76 +20,17 @@ import {
   Phone,
   Shield,
   Activity,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
-// Mock data
-const mockVehicles = [
-  {
-    vehicleId: "TSL-001",
-    status: "active" as const,
-    battery: 87,
-    location: "Downtown Seattle",
-    lastTrip: "15 min ago",
-    revenue: 142.50,
-  },
-  {
-    vehicleId: "TSL-002",
-    status: "charging" as const,
-    battery: 45,
-    location: "Supercharger Station",
-    lastTrip: "1 hour ago",
-    revenue: 98.75,
-  },
-  {
-    vehicleId: "TSL-003",
-    status: "idle" as const,
-    battery: 92,
-    location: "Capitol Hill",
-    lastTrip: "8 min ago",
-    revenue: 203.25,
-  },
-  {
-    vehicleId: "TSL-004",
-    status: "maintenance" as const,
-    battery: 0,
-    location: "Service Center",
-    lastTrip: "3 hours ago",
-    revenue: 0,
-  },
-];
-
-const mockTrips = [
-  {
-    id: "trip-001",
-    passenger: "John Smith",
-    pickup: "Seattle Airport",
-    destination: "Microsoft Campus",
-    duration: "12 min",
-    fare: 24.50,
-    status: "in-transit" as const,
-  },
-  {
-    id: "trip-002",
-    passenger: "Sarah Johnson",
-    pickup: "Pike Place Market",
-    destination: "University of Washington",
-    duration: "18 min",
-    fare: 18.75,
-    status: "pickup" as const,
-  },
-  {
-    id: "trip-003",
-    passenger: "Mike Wilson",
-    pickup: "Bellevue Square",
-    destination: "Seattle Center",
-    duration: "3 min",
-    fare: 32.00,
-    status: "arriving" as const,
-  },
-];
+// Generate random active trips
+const mockTrips = generateActiveTrips(5);
 
 export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const { isConnected, vehicles, lastUpdate } = useSocket();
+  const [avgWaitTime] = useState((Math.random() * 5 + 2).toFixed(1)); // Static on launch
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -96,8 +40,18 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  const totalRevenue = mockVehicles.reduce((sum, vehicle) => sum + vehicle.revenue, 0);
-  const activeVehicles = mockVehicles.filter(v => v.status === "active").length;
+  // Transform socket data to match existing component expectations
+  const realVehicles = vehicles.map(vehicle => ({
+    vehicleId: vehicle.id,
+    status: vehicle.status as "active" | "charging" | "idle" | "maintenance",
+    battery: vehicle.battery,
+    location: `${vehicle.lat.toFixed(4)}, ${vehicle.lng.toFixed(4)}`,
+    lastTrip: vehicle.eta || "Unknown",
+    revenue: Math.floor(Math.random() * 200) + 50, // Mock revenue for now
+  }));
+
+  const totalRevenue = realVehicles.reduce((sum, vehicle) => sum + vehicle.revenue, 0);
+  const activeVehicles = realVehicles.filter(v => v.status === "active").length;
 
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
 
@@ -114,6 +68,16 @@ export default function Dashboard() {
           </Badge>
         </div>
         <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
+            {isConnected ? (
+              <Wifi className="h-4 w-4 text-green-500" />
+            ) : (
+              <WifiOff className="h-4 w-4 text-red-500" />
+            )}
+            <span className="text-xs text-muted-foreground">
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
           <span className="text-xs text-muted-foreground">
             {currentTime.toLocaleTimeString()}
           </span>
@@ -135,12 +99,12 @@ export default function Dashboard() {
             <h3 className="text-sm font-medium text-foreground mb-3">Fleet Analytics</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-background/50 rounded-lg p-3">
-                <div className="text-xs text-muted-foreground">Revenue</div>
-                <div className="text-lg font-semibold text-tesla-green">${totalRevenue.toFixed(0)}</div>
+                <div className="text-xs text-muted-foreground">Avg Wait Time</div>
+                <div className="text-lg font-semibold text-tesla-green">{avgWaitTime} min</div>
               </div>
               <div className="bg-background/50 rounded-lg p-3">
-                <div className="text-xs text-muted-foreground">Trips</div>
-                <div className="text-lg font-semibold text-foreground">47</div>
+                <div className="text-xs text-muted-foreground">Active Trips</div>
+                <div className="text-lg font-semibold text-foreground">{mockTrips.length}</div>
               </div>
             </div>
           </div>
@@ -148,9 +112,9 @@ export default function Dashboard() {
           {/* Vehicle List */}
           <div className="flex-1 overflow-y-auto">
             <div className="p-4">
-              <h3 className="text-sm font-medium text-foreground mb-3">Fleet Vehicles</h3>
-              <div className="space-y-2">
-                {mockVehicles.map((vehicle) => (
+              <h3 className="text-sm font-medium text-foreground mb-3">Fleet Vehicles ({realVehicles.length})</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {realVehicles.map((vehicle) => (
                   <div
                     key={vehicle.vehicleId}
                     className={`p-3 rounded-lg border cursor-pointer transition-all ${
@@ -162,7 +126,13 @@ export default function Dashboard() {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center space-x-2">
-                        <Car className="h-4 w-4 text-tesla-blue" />
+                        <img 
+                          src={`/${vehicle.vehicleId.includes('cybertruck') ? 'cybertruck.png' : 
+                               vehicle.vehicleId.includes('modely') ? 'model y.png' : 
+                               vehicle.vehicleId.includes('modelx') ? 'model x.png' : 'cybertruck.png'}`}
+                          alt={vehicle.vehicleId}
+                          className="h-6 w-6 object-contain"
+                        />
                         <span className="text-sm font-medium text-foreground">{vehicle.vehicleId}</span>
                       </div>
                       <Badge 
@@ -189,15 +159,7 @@ export default function Dashboard() {
 
         {/* Center Map Area */}
         <div className="flex-1 bg-tesla-gray relative">
-          <div className="absolute inset-4 bg-gradient-to-br from-tesla-gray to-tesla-gray-light rounded-lg border border-border">
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <div className="text-center">
-                <MapPin className="h-12 w-12 mx-auto mb-2" />
-                <p className="text-sm">Map will be integrated here</p>
-                <p className="text-xs">Ready for OSRM plugin</p>
-              </div>
-            </div>
-          </div>
+          <LeafletMapComponent vehicles={vehicles} selectedVehicle={selectedVehicle} />
         </div>
 
         {/* Right Sidebar - Operations */}

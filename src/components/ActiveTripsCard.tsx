@@ -9,7 +9,8 @@ interface Trip {
   destination: string;
   duration: string;
   fare: number;
-  status: "pickup" | "in-transit" | "arriving";
+  status: "ride requested" | "en-route" | "dropping off";
+  mileage: number;
 }
 
 interface ActiveTripsCardProps {
@@ -17,9 +18,9 @@ interface ActiveTripsCardProps {
 }
 
 const statusConfig = {
-  pickup: { color: "bg-tesla-blue", label: "Pickup" },
-  "in-transit": { color: "bg-tesla-green", label: "In Transit" },
-  arriving: { color: "bg-tesla-blue", label: "Arriving" },
+  "ride requested": { color: "bg-tesla-blue", label: "Ride Requested" },
+  "en-route": { color: "bg-tesla-green", label: "En Route" },
+  "dropping off": { color: "bg-tesla-blue", label: "Dropping Off" },
 };
 
 export default function ActiveTripsCard({ trips }: ActiveTripsCardProps) {
@@ -32,7 +33,7 @@ export default function ActiveTripsCard({ trips }: ActiveTripsCardProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-96 overflow-y-auto">
           {trips.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No active trips
@@ -73,6 +74,9 @@ export default function ActiveTripsCard({ trips }: ActiveTripsCardProps) {
                       <DollarSign className="mr-1 h-3 w-3" />
                       {trip.fare.toFixed(2)}
                     </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Customer status: {trip.status} • {trip.mileage} miles remaining
                   </div>
                 </div>
               </div>

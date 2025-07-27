@@ -1,73 +1,218 @@
-# Welcome to your Lovable project
+# Robo-Spark Dashboard 🚗⚡
 
-## Project info
+A real-time robotaxi fleet management dashboard with integrated backend services including OSRM routing, vehicle analytics, and positioning.
 
-**URL**: https://lovable.dev/projects/23bfe293-4566-4ddf-8760-43a364b93b2c
+## 🚀 Features
 
-## How can I edit this code?
+- **Real-time Vehicle Tracking**: Live updates via WebSocket connections
+- **Vehicle Analytics**: Battery status, speed, location, and trip progress
+- **Fleet Management**: Monitor multiple vehicle types (Cybertruck, Model Y, Model X)
+- **Database Integration**: PostgreSQL for persistent vehicle and route data
+- **Socket.io Backend**: Real-time communication between vehicles and dashboard
+- **Modern UI**: Built with React, TypeScript, Tailwind CSS, and shadcn/ui
 
-There are several ways of editing your application.
+## 🏗️ Architecture
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/23bfe293-4566-4ddf-8760-43a364b93b2c) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+robo-spark-dash/
+├── src/                    # Frontend React app
+│   ├── components/         # UI components
+│   ├── hooks/             # Custom hooks (useSocket)
+│   ├── pages/             # Dashboard pages
+│   └── lib/               # Utilities
+├── backend/               # Express.js backend
+│   ├── src/
+│   │   ├── routes/        # API routes
+│   │   ├── controllers/   # Business logic
+│   │   ├── models/        # Data models
+│   │   └── utils/         # Database & OSRM utilities
+│   └── package.json
+└── package.json           # Root package.json
 ```
 
-**Edit a file directly in GitHub**
+## 🛠️ Tech Stack
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Frontend
+- React 18 + TypeScript
+- Vite (build tool)
+- Tailwind CSS + shadcn/ui
+- Socket.io Client
+- React Router DOM
+- Recharts (for future analytics)
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
+### Backend
+- Node.js + Express
 - TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- Socket.io
+- PostgreSQL
+- Redis (for caching)
+- OSRM (Open Source Routing Machine)
 
-## How can I deploy this project?
+## 🚀 Quick Start
 
-Simply open [Lovable](https://lovable.dev/projects/23bfe293-4566-4ddf-8760-43a364b93b2c) and click on Share -> Publish.
+### Prerequisites
+- Node.js 18+
+- PostgreSQL
+- Redis (optional)
 
-## Can I connect a custom domain to my Lovable project?
+### Installation
 
-Yes, you can!
+1. **Clone and install dependencies:**
+   ```bash
+   git clone <your-repo>
+   cd robo-spark-dash
+   npm run install:all
+   ```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+2. **Set up environment variables:**
+   ```bash
+   # Create .env file with your database credentials
+   cp .env.example .env
+   ```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+3. **Start the development servers:**
+   ```bash
+   npm run dev
+   ```
+   
+   This starts both:
+   - Frontend: http://localhost:8080
+   - Backend: http://localhost:8000
+
+4. **Test with vehicle simulator:**
+   ```bash
+   # In a new terminal
+   npm run test:simulator
+   ```
+
+## 📊 Dashboard Features
+
+### Real-time Vehicle Monitoring
+- Live vehicle status updates
+- Battery level tracking
+- Speed and location monitoring
+- Trip progress visualization
+- Connection status indicators
+
+### Fleet Analytics
+- Total revenue tracking
+- Active vehicle count
+- Trip statistics
+- Vehicle performance metrics
+
+### Vehicle Management
+- Individual vehicle selection
+- Status filtering
+- Real-time location tracking
+- Battery management
+
+## 🔌 API Endpoints
+
+### Vehicle Routes
+- `GET /api/v1/vehicles` - Get all vehicles
+- `GET /api/v1/vehicles/:id` - Get specific vehicle
+- `POST /api/v1/vehicles` - Create new vehicle
+- `POST /api/v1/vehicles/:id/route` - Create route for vehicle
+- `POST /api/v1/vehicles/snap-route` - Snap route to roads (OSRM)
+
+### WebSocket Events
+- `vehicle-update` - Real-time vehicle data
+- `pull-over-alert` - Emergency alerts
+- `help-request-alert` - Assistance requests
+- `control` - Vehicle control commands
+
+## 🗄️ Database Schema
+
+### Vehicles Table
+```sql
+CREATE TABLE vehicles (
+  id VARCHAR PRIMARY KEY,
+  type VARCHAR,
+  status VARCHAR,
+  lat DECIMAL,
+  lng DECIMAL,
+  progress INTEGER,
+  battery INTEGER,
+  speed INTEGER,
+  eta VARCHAR,
+  heading INTEGER
+);
+```
+
+### Routes Table
+```sql
+CREATE TABLE routes (
+  id VARCHAR PRIMARY KEY,
+  vehicle_id VARCHAR REFERENCES vehicles(id),
+  waypoints JSONB,
+  pickup_location JSONB,
+  destination JSONB,
+  status VARCHAR
+);
+```
+
+## 🧪 Testing
+
+### Vehicle Simulator
+The included test simulator sends realistic vehicle updates:
+
+```bash
+npm run test:simulator
+```
+
+This simulates:
+- Vehicle movement
+- Battery drain/charging
+- Status changes
+- Trip progress
+
+### Manual Testing
+1. Start the servers: `npm run dev`
+2. Open http://localhost:8080/dashboard
+3. Run the simulator: `npm run test:simulator`
+4. Watch real-time updates in the dashboard
+
+## 🔧 Development
+
+### Project Structure
+- **Monorepo setup**: Frontend and backend in single repository
+- **Concurrent development**: Both servers run simultaneously
+- **Type safety**: Full TypeScript coverage
+- **Hot reloading**: Both frontend and backend support hot reload
+
+### Adding New Features
+1. **Backend**: Add routes in `backend/src/routes/`
+2. **Frontend**: Add components in `src/components/`
+3. **Database**: Update models in `backend/src/models/`
+4. **Real-time**: Use Socket.io events for live updates
+
+## 🚀 Deployment
+
+### Production Build
+```bash
+npm run build:backend
+npm run build
+```
+
+### Environment Variables
+```bash
+DATABASE_URL=postgresql://user:pass@host:port/db
+REDIS_URL=redis://localhost:6379
+PORT=8000
+JWT_SECRET=your-secret-key
+```
+
+## 🤝 Contributing
+
+1. Follow the Baby Steps™ methodology
+2. One meaningful change at a time
+3. Validate each step before proceeding
+4. Document all changes
+
+## 📝 License
+
+MIT License - see LICENSE file for details
+
+---
+
+**Built with ❤️ following the Baby Steps™ methodology**
