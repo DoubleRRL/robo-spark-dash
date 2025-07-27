@@ -1,0 +1,251 @@
+import { io } from 'socket.io-client';
+import { 
+  initializeVehicleRoutes, 
+  updateVehiclePosition, 
+  assignTripToVehicle, 
+  sendVehicleToCharging,
+  VehicleRoute 
+} from './vehicleRouting';
+import { getRandomAddress } from './comptonAddresses';
+
+class RealisticVehicleSimulator {
+  private vehicles: VehicleRoute[] = [];
+  private socket: any;
+  private interval: NodeJS.Timeout | null = null;
+  private tripQueue: Array<{
+    id: string;
+    pickup: { lat: number; lng: number; name: string };
+    destination: { lat: number; lng: number; name: string };
+    passenger: string;
+  }> = [];
+
+  constructor() {
+    this.socket = io('http://localhost:8000/vehicles', {
+      transports: ['websocket', 'polling']
+    });
+    
+    this.socket.on('connect', () => {
+      console.log('✅ Connected to backend');
+      this.startSimulation();
+    });
+    
+    this.socket.on('disconnect', () => {
+      console.log('❌ Disconnected from backend');
+    });
+  }
+
+  private startSimulation() {
+    // Initialize vehicles at fixed locations
+    this.vehicles = initializeVehicleRoutes();
+    
+    // Start update loop
+    this.interval = setInterval(() => {
+      this.updateVehicles();
+      this.generateNewTrips();
+      this.sendUpdates();
+    }, 2000); // Update every 2 seconds
+    
+    console.log('🚗 Realistic Vehicle Simulator Started');
+    console.log(`📊 ${this.vehicles.length} vehicles initialized`);
+  }
+
+  private updateVehicles() {
+    this.vehicles = this.vehicles.map(vehicle => {
+      let updatedVehicle = updateVehiclePosition(vehicle);
+      
+      // Handle trip completion
+      if (updatedVehicle.status === 'busy' && 
+          updatedVehicle.currentIndex >= updatedVehicle.route.length - 1) {
+        updatedVehicle.status = 'available';
+        updatedVehicle.route = [];
+        updatedVehicle.currentIndex = 0;
+        updatedVehicle.speed = 0;
+        console.log(`✅ Vehicle ${updatedVehicle.id} completed trip`);
+      }
+      
+      // Handle charging completion
+      if (updatedVehicle.status === 'charging' && updatedVehicle.battery >= 95) {
+        updatedVehicle.status = 'available';
+        updatedVehicle.route = [];
+        updatedVehicle.currentIndex = 0;
+        updatedVehicle.speed = 0;
+        console.log(`🔋 Vehicle ${updatedVehicle.id} finished charging`);
+      }
+      
+      // Handle en-route-to-charging completion
+      if (updatedVehicle.status === 'en-route-to-charging' && 
+          updatedVehicle.currentIndex >= updatedVehicle.route.length - 1) {
+        updatedVehicle.status = 'charging';
+        updatedVehicle.route = [];
+        updatedVehicle.currentIndex = 0;
+        updatedVehicle.speed = 0;
+        console.log(`🔌 Vehicle ${updatedVehicle.id} arrived at charging station`);
+      }
+      
+      // Send low battery vehicles to charging
+      if (updatedVehicle.status === 'available' && updatedVehicle.battery < 20) {
+        this.sendVehicleToCharging(updatedVehicle.id);
+      }
+      
+      return updatedVehicle;
+    });
+  }
+
+  private async generateNewTrips() {
+    // Generate new trip requests occasionally
+    if (Math.random() < 0.3 && this.tripQueue.length < 5) { // 30% chance, max 5 queued
+      const pickupLocation = getRandomAddress();
+      const destinationLocation = getRandomAddress();
+      
+      this.tripQueue.push({
+        id: `trip-${Date.now()}`,
+        pickup: {
+          lat: pickupLocation.lat,
+          lng: pickupLocation.lng,
+          name: pickupLocation.name
+        },
+        destination: {
+          lat: destinationLocation.lat,
+          lng: destinationLocation.lng,
+          name: destinationLocation.name
+        },
+        passenger: `Passenger-${Math.floor(Math.random() * 1000)}`
+      });
+      
+      console.log(`🚕 New trip request: ${pickupLocation.name} → ${destinationLocation.name}`);
+    }
+    
+    // Assign trips to available vehicles
+    this.assignTripsToVehicles();
+  }
+
+  private async assignTripsToVehicles() {
+    const availableVehicles = this.vehicles.filter(v => v.status === 'available');
+    
+    for (const trip of this.tripQueue) {
+      if (availableVehicles.length === 0) break;
+      
+      // Find nearest available vehicle
+      const nearestVehicle = availableVehicles.reduce((nearest, vehicle) => {
+        const distance = Math.sqrt(
+          Math.pow(trip.pickup.lat - vehicle.lat, 2) + 
+          Math.pow(trip.pickup.lng - vehicle.lng, 2)
+        );
+        if (!nearest || distance < nearest.distance) {
+          return { vehicle, distance };
+        }
+        return nearest;
+      }, null as { vehicle: VehicleRoute; distance: number } | null);
+      
+      if (nearestVehicle) {
+        try {
+          const updatedVehicle = await assignTripToVehicle(
+            nearestVehicle.vehicle,
+            trip.pickup,
+            trip.destination
+          );
+          
+          // Update vehicle in array
+          const index = this.vehicles.findIndex(v => v.id === updatedVehicle.id);
+          if (index !== -1) {
+            this.vehicles[index] = updatedVehicle;
+          }
+          
+          // Remove trip from queue
+          this.tripQueue = this.tripQueue.filter(t => t.id !== trip.id);
+          
+          console.log(`🚗 Vehicle ${updatedVehicle.id} assigned to trip ${trip.id}`);
+        } catch (error) {
+          console.error('Failed to assign trip:', error);
+        }
+      }
+    }
+  }
+
+  private async sendVehicleToCharging(vehicleId: string) {
+    const vehicle = this.vehicles.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+    
+    try {
+      const updatedVehicle = await sendVehicleToCharging(vehicle);
+      
+      // Update vehicle in array
+      const index = this.vehicles.findIndex(v => v.id === vehicleId);
+      if (index !== -1) {
+        this.vehicles[index] = updatedVehicle;
+      }
+      
+      console.log(`🔌 Vehicle ${vehicleId} sent to charging station`);
+    } catch (error) {
+      console.error('Failed to send vehicle to charging:', error);
+    }
+  }
+
+  private sendUpdates() {
+    this.vehicles.forEach(vehicle => {
+      const update = {
+        id: vehicle.id,
+        type: this.getVehicleType(vehicle.id),
+        status: vehicle.status,
+        lat: vehicle.lat,
+        lng: vehicle.lng,
+        progress: vehicle.route.length > 0 ? 
+          (vehicle.currentIndex / vehicle.route.length) * 100 : 0,
+        battery: Math.round(vehicle.battery),
+        speed: Math.round(vehicle.speed),
+        eta: this.calculateETA(vehicle),
+        heading: this.calculateHeading(vehicle)
+      };
+      
+      this.socket.emit('vehicle-update', update);
+    });
+  }
+
+  private getVehicleType(vehicleId: string): string {
+    const num = parseInt(vehicleId.split('-')[1]);
+    if (num <= 5) return 'cybertruck';
+    if (num <= 10) return 'modely';
+    return 'modelx';
+  }
+
+  private calculateETA(vehicle: VehicleRoute): string {
+    if (vehicle.status === 'available') return '0 min';
+    
+    const remainingPoints = vehicle.route.length - vehicle.currentIndex;
+    const estimatedMinutes = Math.ceil(remainingPoints * 0.5); // Rough estimate
+    
+    return `${estimatedMinutes} min`;
+  }
+
+  private calculateHeading(vehicle: VehicleRoute): number {
+    if (vehicle.route.length === 0 || vehicle.currentIndex >= vehicle.route.length - 1) {
+      return 0;
+    }
+    
+    const current = vehicle.route[vehicle.currentIndex];
+    const next = vehicle.route[vehicle.currentIndex + 1];
+    
+    const deltaLng = next.lng - current.lng;
+    const deltaLat = next.lat - current.lat;
+    
+    return Math.atan2(deltaLng, deltaLat) * 180 / Math.PI;
+  }
+
+  public stop() {
+    if (this.interval) {
+      clearInterval(this.interval);
+    }
+    this.socket.disconnect();
+    console.log('🛑 Realistic Vehicle Simulator Stopped');
+  }
+}
+
+// Start simulator
+const simulator = new RealisticVehicleSimulator();
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n🛑 Stopping realistic simulator...');
+  simulator.stop();
+  process.exit(0);
+}); 

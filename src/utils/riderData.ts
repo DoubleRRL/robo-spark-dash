@@ -141,29 +141,9 @@ const lastNames = [
   'Stanton', 'Palmer', 'Calderon', 'Powell', 'Galvan', 'Faulkner', 'Boyer', 'Mcconnell'
 ];
 
-// Compton, CA locations for pickup/dropoff
-const comptonLocations = [
-  'Compton City Hall',
-  'Compton College',
-  'Compton Airport',
-  'Compton Creek Park',
-  'Compton Station',
-  'Compton High School',
-  'Compton Library',
-  'Compton Community Center',
-  'Compton Shopping Center',
-  'Compton Medical Center',
-  'Compton Police Station',
-  'Compton Fire Station',
-  'Compton Post Office',
-  'Compton Bank',
-  'Compton Gas Station',
-  'Compton Restaurant',
-  'Compton Park',
-  'Compton Elementary School',
-  'Compton Middle School',
-  'Compton Church'
-];
+// Import real Compton addresses
+import { getRandomAddress } from './comptonAddresses';
+import { calculateFare } from './vehicleRouting';
 
 // Trip statuses
 const tripStatuses = [
@@ -179,9 +159,13 @@ export function generateRandomRider() {
 }
 
 export function generateRandomTrip() {
-  const pickup = comptonLocations[Math.floor(Math.random() * comptonLocations.length)];
-  const destination = comptonLocations[Math.floor(Math.random() * comptonLocations.length)];
-  const mileage = Math.floor(Math.random() * 15) + 1; // 1-15 miles
+  const pickupLocation = getRandomAddress();
+  const destinationLocation = getRandomAddress();
+  
+  // Calculate actual distance between pickup and destination
+  const latDiff = pickupLocation.lat - destinationLocation.lat;
+  const lngDiff = pickupLocation.lng - destinationLocation.lng;
+  const mileage = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 69; // Convert to miles
   
   // Determine status based on mileage
   let status: "ride requested" | "en-route" | "dropping off";
@@ -196,12 +180,14 @@ export function generateRandomTrip() {
   return {
     id: `trip-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
     passenger: generateRandomRider(),
-    pickup,
-    destination,
+    pickup: pickupLocation.address,
+    destination: destinationLocation.address,
+    pickupLocation: pickupLocation,
+    destinationLocation: destinationLocation,
     status,
     mileage,
     duration: `${Math.floor(Math.random() * 20) + 5} min`,
-    fare: Math.floor(Math.random() * 30) + 15
+    fare: calculateFare(mileage)
   };
 }
 

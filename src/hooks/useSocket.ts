@@ -26,6 +26,7 @@ interface VehicleUpdate {
   route?: RoutePoint[];
   pickupLocation?: Location;
   destination?: Location;
+  diagnostics?: any; // Add diagnostics field
 }
 
 interface UseSocketReturn {

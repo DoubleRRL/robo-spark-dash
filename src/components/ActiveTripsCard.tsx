@@ -9,8 +9,22 @@ interface Trip {
   destination: string;
   duration: string;
   fare: number;
-  status: "ride requested" | "en-route" | "dropping off";
+  status: "en-route" | "dropping off";
   mileage: number;
+  pickupLocation?: {
+    name: string;
+    address: string;
+    lat: number;
+    lng: number;
+    type: string;
+  };
+  destinationLocation?: {
+    name: string;
+    address: string;
+    lat: number;
+    lng: number;
+    type: string;
+  };
 }
 
 interface ActiveTripsCardProps {
@@ -18,7 +32,6 @@ interface ActiveTripsCardProps {
 }
 
 const statusConfig = {
-  "ride requested": { color: "bg-tesla-blue", label: "Ride Requested" },
   "en-route": { color: "bg-tesla-green", label: "En Route" },
   "dropping off": { color: "bg-tesla-blue", label: "Dropping Off" },
 };
