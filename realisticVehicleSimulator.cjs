@@ -127,30 +127,65 @@ function updateVehiclePosition(vehicle) {
   return updatedVehicle;
 }
 
-// Create simple route between two points
-function createSimpleRoute(startLat, startLng, endLat, endLng) {
-  const points = 20;
+// Create realistic route between two points using OSRM
+async function createRealisticRoute(startLat, startLng, endLat, endLng) {
+  try {
+    // Try OSRM first for realistic routing
+    const response = await fetch(
+      `http://localhost:5000/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.routes && data.routes[0]) {
+        const coordinates = data.routes[0].geometry.coordinates;
+        const duration = data.routes[0].duration;
+        
+        // Convert to route points with timestamps
+        const route = coordinates.map((coord, index) => ({
+          lat: coord[1],
+          lng: coord[0],
+          timestamp: Date.now() + (index * (duration * 1000 / coordinates.length))
+        }));
+        
+        console.log(`✅ Created realistic OSRM route with ${route.length} points`);
+        return route;
+      }
+    }
+  } catch (error) {
+    console.log(`⚠️ OSRM failed, using fallback route:`, error);
+  }
+  
+  // Fallback: create curved route (not straight line)
+  const points = 15;
   const route = [];
   
   for (let i = 0; i <= points; i++) {
     const progress = i / points;
-    const lat = startLat + (endLat - startLat) * progress;
-    const lng = startLng + (endLng - startLng) * progress;
+    
+    // Add some curve to make it more realistic
+    const curve = Math.sin(progress * Math.PI) * 0.001;
+    const lat = startLat + (endLat - startLat) * progress + curve;
+    const lng = startLng + (endLng - startLng) * progress + curve;
+    
+    // Ensure within Compton bounds
+    const constrained = constrainToComptonBoundary(lat, lng);
+    
     route.push({
-      lat,
-      lng,
-      timestamp: Date.now() + (i * 2000) // 2 seconds per point
+      lat: constrained.lat,
+      lng: constrained.lng,
+      timestamp: Date.now() + (i * 3000) // 3 seconds per point
     });
   }
   
   return route;
 }
 
-// Assign trip to vehicle
-function assignTripToVehicle(vehicle, pickup, destination) {
+// Update the assignment function to use realistic routes
+async function assignTripToVehicle(vehicle, pickup, destination) {
   // Create route from current position to pickup, then to destination
-  const pickupRoute = createSimpleRoute(vehicle.lat, vehicle.lng, pickup.lat, pickup.lng);
-  const destinationRoute = createSimpleRoute(pickup.lat, pickup.lng, destination.lat, destination.lng);
+  const pickupRoute = await createRealisticRoute(vehicle.lat, vehicle.lng, pickup.lat, pickup.lng);
+  const destinationRoute = await createRealisticRoute(pickup.lat, pickup.lng, destination.lat, destination.lng);
   const fullRoute = [...pickupRoute, ...destinationRoute];
   
   return {
@@ -166,9 +201,9 @@ function assignTripToVehicle(vehicle, pickup, destination) {
 }
 
 // Send vehicle to charging
-function sendVehicleToCharging(vehicle) {
+async function sendVehicleToCharging(vehicle) {
   const nearestCharging = CHARGING_STATIONS[0]; // Use first charging station
-  const chargingRoute = createSimpleRoute(vehicle.lat, vehicle.lng, nearestCharging.lat, nearestCharging.lng);
+  const chargingRoute = await createRealisticRoute(vehicle.lat, vehicle.lng, nearestCharging.lat, nearestCharging.lng);
   
   return {
     ...vehicle,
@@ -292,7 +327,7 @@ class RealisticVehicleSimulator {
 
     if (nearestVehicle) {
       console.log(`Assigning trip to ${nearestVehicle.vehicle.id}`);
-      const updatedVehicle = assignTripToVehicle(nearestVehicle.vehicle, trip.pickup, trip.destination);
+      const updatedVehicle = await assignTripToVehicle(nearestVehicle.vehicle, trip.pickup, trip.destination);
       const index = this.vehicles.findIndex(v => v.id === updatedVehicle.id);
       if (index !== -1) {
         this.vehicles[index] = updatedVehicle;
@@ -307,7 +342,7 @@ class RealisticVehicleSimulator {
       const pickupLocation = getRandomAddress();
       const destinationLocation = getRandomAddress();
       console.log(`🚕 Vehicle ${vehicle.id} getting new trip: ${pickupLocation.name} → ${destinationLocation.name}`);
-      const updatedVehicle = assignTripToVehicle(
+      const updatedVehicle = await assignTripToVehicle(
         vehicle,
         { lat: pickupLocation.lat, lng: pickupLocation.lng, name: pickupLocation.name },
         { lat: destinationLocation.lat, lng: destinationLocation.lng, name: destinationLocation.name }
@@ -322,7 +357,7 @@ class RealisticVehicleSimulator {
   }
   
   async sendVehicleToCharging(vehicle) {
-    const updatedVehicle = sendVehicleToCharging(vehicle);
+    const updatedVehicle = await sendVehicleToCharging(vehicle);
     const index = this.vehicles.findIndex(v => v.id === updatedVehicle.id);
     if (index !== -1) {
       this.vehicles[index] = updatedVehicle;
@@ -331,6 +366,7 @@ class RealisticVehicleSimulator {
 
   sendUpdates() {
     if (!this.socket) return;
+    console.log(`📡 Sending updates for ${this.vehicles.length} vehicles...`);
     this.vehicles.forEach(vehicle => {
       const diagnostics = generateVehicleDiagnostics(vehicle.id, vehicle);
       const updatePayload = {
@@ -345,6 +381,7 @@ class RealisticVehicleSimulator {
         currentIndex: vehicle.currentIndex,
         diagnostics,
       };
+      console.log(`🚗 Sending update for ${vehicle.id}: status=${vehicle.status}, lat=${vehicle.lat.toFixed(4)}`);
       this.socket.emit('vehicle-update', updatePayload);
     });
   }

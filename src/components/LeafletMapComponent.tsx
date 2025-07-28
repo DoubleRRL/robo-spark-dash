@@ -445,9 +445,19 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
     
-    // Remove existing routing control
+    // Remove existing routing control - FIX THE CLEANUP
     if (routeControlRef.current) {
-      map.removeControl(routeControlRef.current);
+      try {
+        if (typeof routeControlRef.current.remove === 'function') {
+          routeControlRef.current.remove();
+        } else if (typeof routeControlRef.current.removeFrom === 'function') {
+          routeControlRef.current.removeFrom(map);
+        } else {
+          map.removeControl(routeControlRef.current);
+        }
+      } catch (error) {
+        console.log('⚠️ Error removing route control:', error);
+      }
       routeControlRef.current = null;
     }
 
@@ -548,26 +558,45 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
             
             console.log(`🎯 Waypoints for routing:`, waypoints);
             
-            routeControlRef.current = (L as any).Routing.control({
+            // Try OSRM first, fallback to simple polyline
+            const routingControl = L.Routing.control({
               waypoints: waypoints,
-              router: (L as any).Routing.osrmv1({
+              router: L.Routing.osrmv1({
                 serviceUrl: 'http://localhost:5000/route/v1'
               }),
-              lineOptions: {
-                styles: [{ 
-                  color: '#3b82f6', 
-                  weight: 4, 
-                  opacity: 0.8,
-                  dashArray: '10, 5'
-                }],
-                extendToWaypoints: true,
-                missingRouteTolerance: 0
-              },
-              createMarker: () => null, // Hide default waypoint markers
+              routeWhileDragging: false,
               addWaypoints: false,
-              show: false,
-              showAlternatives: false
+              createMarker: () => null, // Don't create markers
+              lineOptions: {
+                styles: [{ color: '#3b82f6', weight: 4, opacity: 0.7 }]
+              }
+            }).on('routingerror', (e) => {
+              console.log(`⚠️ OSRM routing failed, using fallback polyline:`, e);
+              
+              // Remove the failed routing control
+              if (routeControlRef.current) {
+                map.removeControl(routeControlRef.current);
+                routeControlRef.current = null;
+              }
+              
+              // Create simple polyline as fallback
+              const polylinePoints = routeData.map(point => [point.lat, point.lng] as [number, number]);
+              const polyline = L.polyline(polylinePoints, {
+                color: '#3b82f6',
+                weight: 4,
+                opacity: 0.7
+              }).addTo(map);
+              
+              // Store reference for cleanup with proper methods
+              routeControlRef.current = {
+                remove: () => polyline.remove(),
+                removeFrom: () => polyline.remove()
+              };
+              
+              console.log(`✅ Fallback polyline created with ${polylinePoints.length} points`);
             }).addTo(map);
+            
+            routeControlRef.current = routingControl;
 
             console.log(`✅ Routing control created and added to map`);
 

@@ -45,6 +45,8 @@ export const useSocket = (): UseSocketReturn => {
   const vehiclesRef = useRef<VehicleUpdate[]>([]);
 
   useEffect(() => {
+    console.log('🔌 Initializing socket connection...');
+    
     // create socket connection
     const socket = io('http://localhost:8000/vehicles', {
       transports: ['websocket', 'polling'],
@@ -54,21 +56,26 @@ export const useSocket = (): UseSocketReturn => {
 
     // connection events
     socket.on('connect', () => {
-      console.log('connected to vehicle socket');
+      console.log('✅ connected to vehicle socket');
       setIsConnected(true);
     });
 
     socket.on('disconnect', () => {
-      console.log('disconnected from vehicle socket');
+      console.log('❌ disconnected from vehicle socket');
       setIsConnected(false);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('🚫 socket connection error:', error);
     });
 
     // vehicle update events
     socket.on('vehicle-update', (data: VehicleUpdate) => {
-      console.log('received vehicle update:', data);
+      console.log('🔄 received vehicle update:', data.id, 'status:', data.status, 'lat:', data.lat, 'lng:', data.lng);
       setLastUpdate(data);
       
       setVehicles(prev => {
+        console.log('📊 updating vehicles state, current count:', prev.length);
         const existingIndex = prev.findIndex(v => v.id === data.id);
         
         if (existingIndex !== -1) {
@@ -79,9 +86,11 @@ export const useSocket = (): UseSocketReturn => {
             ...newVehicles[existingIndex], // Preserve existing properties
             ...data // Override with new data
           };
+          console.log('✅ updated existing vehicle:', data.id, 'new status:', newVehicles[existingIndex].status);
           return newVehicles;
         } else {
           // Add new vehicle
+          console.log('➕ adding new vehicle:', data.id);
           return [...prev, data];
         }
       });

@@ -49,14 +49,20 @@ export default function Dashboard() {
   // Debug: log vehicle count
   console.log('Total vehicles received:', vehicles.length);
   console.log('Vehicle IDs:', vehicles.map(v => v.id));
+  console.log('🔍 Raw vehicle data:', vehicles.slice(0, 3)); // Log first 3 vehicles for debugging
   const [avgWaitTime] = useState((Math.random() * 5 + 2).toFixed(1)); // Static on launch
 
-  // Vehicle type mapping function
-  const getVehicleDisplayName = (vehicleId: string) => {
+  // Vehicle type mapping function - FIX: use type field from socket data
+  const getVehicleDisplayName = (vehicle: any) => {
+    // First try the type field from socket data
+    if (vehicle.type) return vehicle.type;
+    
+    // Fallback to ID parsing for compatibility
+    const vehicleId = vehicle.id || vehicle.vehicleId || '';
     if (vehicleId.includes('modelx')) return 'Model X';
     if (vehicleId.includes('cybertruck')) return 'Cybertruck';
     if (vehicleId.includes('modely')) return 'Model Y';
-    return 'Unknown';
+    return 'Model X'; // Default fallback
   };
 
   useEffect(() => {
@@ -69,6 +75,8 @@ export default function Dashboard() {
 
   // Transform socket data to match existing component expectations
   const realVehicles = vehicles.map(vehicle => {
+    console.log(`🔄 Mapping vehicle ${vehicle.id}: socket status "${vehicle.status}"`);
+    
     // Map socket status to component status with more specific definitions
     let status: "pickup" | "dropoff" | "en-route" | "charging" | "available";
     switch (vehicle.status) {
@@ -88,8 +96,11 @@ export default function Dashboard() {
         status = 'dropoff';
         break;
       default:
+        console.log(`⚠️ Unknown status "${vehicle.status}" for vehicle ${vehicle.id}, defaulting to available`);
         status = 'available';
     }
+    
+    console.log(`✅ Mapped vehicle ${vehicle.id}: "${vehicle.status}" -> "${status}"`);
 
     return {
       vehicleId: vehicle.id,
@@ -97,7 +108,7 @@ export default function Dashboard() {
       battery: vehicle.battery,
       location: `${vehicle.lat.toFixed(4)}, ${vehicle.lng.toFixed(4)}`,
       lastTrip: vehicle.eta || "Unknown",
-      type: getVehicleDisplayName(vehicle.id),
+      type: getVehicleDisplayName(vehicle),
     };
   });
 
@@ -243,10 +254,10 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center space-x-2">
                         <img 
-                          src={`/${vehicle.vehicleId.includes('cybertruck') ? 'cybertruck.png' : 
-                               vehicle.vehicleId.includes('modely') ? 'model y.png' : 
-                               vehicle.vehicleId.includes('modelx') ? 'model x.png' : 'cybertruck.png'}`}
-                          alt={vehicle.vehicleId}
+                          src={`/${vehicle.type === 'Cybertruck' ? 'cybertruck.png' : 
+                               vehicle.type === 'Model Y' ? 'model y.png' : 
+                               vehicle.type === 'Model X' ? 'model x.png' : 'cybertruck.png'}`}
+                          alt={vehicle.type}
                           className="h-6 w-6 object-contain"
                         />
                         <div>
