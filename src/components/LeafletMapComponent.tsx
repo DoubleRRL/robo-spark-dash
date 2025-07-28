@@ -233,30 +233,34 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
     }
   };
 
-  // Function to generate a realistic route with intermediate points within Compton
+  // Generate a realistic route with intermediate points within Compton bounds
   const generateRealisticRoute = (startLat: number, startLng: number, endLat: number, endLng: number) => {
+    console.log(`🔄 Generating realistic route from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
+    
     const route = [];
-    const numPoints = 8; // More points for smoother route
+    const numPoints = 12; // More points for smoother curve
     
     for (let i = 0; i <= numPoints; i++) {
       const progress = i / numPoints;
-      
-      // Use cubic bezier curve for more realistic path
       const t = progress;
-      const lat = startLat + (endLat - startLat) * t + Math.sin(t * Math.PI) * 0.002 * (Math.random() - 0.5);
-      const lng = startLng + (endLng - startLng) * t + Math.sin(t * Math.PI) * 0.002 * (Math.random() - 0.5);
+      
+      // Create a curved path using sine wave for more realistic movement
+      const curveIntensity = 0.003; // Controls how much the route curves
+      const lat = startLat + (endLat - startLat) * t + Math.sin(t * Math.PI) * curveIntensity * (Math.random() - 0.5);
+      const lng = startLng + (endLng - startLng) * t + Math.sin(t * Math.PI) * curveIntensity * (Math.random() - 0.5);
       
       // Ensure point is within Compton bounds
       const boundedLat = Math.max(COMPTON_BOUNDS.south, Math.min(COMPTON_BOUNDS.north, lat));
       const boundedLng = Math.max(COMPTON_BOUNDS.west, Math.min(COMPTON_BOUNDS.east, lng));
       
-      route.push({
-        lat: boundedLat,
-        lng: boundedLng,
+      route.push({ 
+        lat: boundedLat, 
+        lng: boundedLng, 
         timestamp: Date.now() + (i * 30000) // 30 seconds between points
       });
     }
     
+    console.log(`✅ Generated realistic route with ${route.length} points`);
     return route;
   };
 
@@ -527,15 +531,23 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
           console.log(`📍 Route start:`, routeData[0]);
           console.log(`📍 Route end:`, routeData[routeData.length - 1]);
           
-          // Use leaflet-routing-machine for proper street-following routes
-          const waypoints = [
-            L.latLng(selectedVehicleData.lat, selectedVehicleData.lng),
-            L.latLng(routeData[routeData.length - 1].lat, routeData[routeData.length - 1].lng)
-          ];
+          // Remove existing route control
+          if (routeControlRef.current) {
+            map.removeControl(routeControlRef.current);
+            routeControlRef.current = null;
+          }
           
-          console.log(`🎯 Waypoints for routing:`, waypoints);
-          
+          // Try OSRM first, fallback to simple polyline
           try {
+            console.log(`🔄 Attempting OSRM routing...`);
+            
+            const waypoints = [
+              L.latLng(selectedVehicleData.lat, selectedVehicleData.lng),
+              L.latLng(routeData[routeData.length - 1].lat, routeData[routeData.length - 1].lng)
+            ];
+            
+            console.log(`🎯 Waypoints for routing:`, waypoints);
+            
             routeControlRef.current = (L as any).Routing.control({
               waypoints: waypoints,
               router: (L as any).Routing.osrmv1({
@@ -571,8 +583,32 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
             }, 100);
             
             console.log(`✅ Route displayed for ${selectedVehicle} using OSRM`);
+            
           } catch (error) {
-            console.error(`❌ Error creating routing control:`, error);
+            console.log(`⚠️ OSRM routing failed, using fallback polyline:`, error);
+            
+            // Fallback: draw simple polyline with route points
+            const routePoints = routeData.map(point => [point.lat, point.lng]);
+            console.log(`📏 Drawing fallback polyline with ${routePoints.length} points`);
+            
+            const polyline = L.polyline(routePoints as [number, number][], {
+              color: '#3b82f6',
+              weight: 4,
+              opacity: 0.8,
+              dashArray: '10, 5'
+            }).addTo(map);
+            
+            // Store polyline reference for cleanup
+            routeControlRef.current = polyline as any;
+            
+            // Add pulsing animation to polyline
+            const polylineElement = polyline.getElement();
+            if (polylineElement && polylineElement instanceof HTMLElement) {
+              polylineElement.style.animation = 'routePulse 2s ease-in-out infinite';
+              console.log(`✨ Fallback route animation applied`);
+            }
+            
+            console.log(`✅ Fallback route displayed for ${selectedVehicle}`);
           }
         } else {
           console.log(`⚠️ No route data available for ${selectedVehicle}`);
@@ -585,6 +621,15 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
       }
     } else {
       console.log(`🔍 No vehicle selected, clearing routes`);
+      // Clear existing route
+      if (routeControlRef.current) {
+        if (routeControlRef.current.remove) {
+          map.removeControl(routeControlRef.current);
+        } else {
+          map.removeLayer(routeControlRef.current);
+        }
+        routeControlRef.current = null;
+      }
     }
 
   }, [vehicles, selectedVehicle, vehicleRoutes]);
