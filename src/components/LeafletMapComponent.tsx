@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-routing-machine';
 
 interface Vehicle {
   id: string;
@@ -12,6 +13,8 @@ interface Vehicle {
   speed?: number;
   route?: Array<{ lat: number; lng: number; timestamp: number }>;
   currentIndex?: number;
+  pickup?: { lat: number; lng: number; name: string };
+  destination?: { lat: number; lng: number; name: string };
 }
 
 interface LeafletMapComponentProps {
@@ -46,6 +49,44 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
+
+// Compton boundary coordinates for route validation
+const COMPTON_BOUNDS = {
+  north: 33.91783,
+  south: 33.86303,
+  east: -118.18225,
+  west: -118.26315
+};
+
+// Realistic destinations within Compton for mock routes
+const COMPTON_DESTINATIONS = [
+  { lat: 33.8958, lng: -118.2201, name: "Compton City Hall" },
+  { lat: 33.8897, lng: -118.2189, name: "Compton College" },
+  { lat: 33.8889, lng: -118.2350, name: "Compton Airport" },
+  { lat: 33.8950, lng: -118.2200, name: "Compton Library" },
+  { lat: 33.8900, lng: -118.2150, name: "Compton High School" },
+  { lat: 33.8850, lng: -118.2000, name: "Compton Shopping Center" },
+  { lat: 33.8800, lng: -118.2100, name: "Compton Plaza" },
+  { lat: 33.8820, lng: -118.2050, name: "Compton Station" },
+  { lat: 33.8750, lng: -118.2050, name: "Compton Medical Center" },
+  { lat: 33.8780, lng: -118.2080, name: "Compton Community Hospital" },
+  { lat: 33.8700, lng: -118.2100, name: "Compton Creek Park" },
+  { lat: 33.8650, lng: -118.2200, name: "Compton Park" },
+  { lat: 33.8900, lng: -118.1900, name: "Compton Residential Area 1" },
+  { lat: 33.8850, lng: -118.2300, name: "Compton Residential Area 2" },
+  { lat: 33.8800, lng: -118.1950, name: "Compton Residential Area 3" }
+];
+
+// Function to check if coordinates are within Compton bounds
+function isWithinComptonBounds(lat: number, lng: number): boolean {
+  return lat >= COMPTON_BOUNDS.south && lat <= COMPTON_BOUNDS.north &&
+         lng >= COMPTON_BOUNDS.west && lng <= COMPTON_BOUNDS.east;
+}
+
+// Function to get a random destination within Compton
+function getRandomComptonDestination(): { lat: number; lng: number; name: string } {
+  return COMPTON_DESTINATIONS[Math.floor(Math.random() * COMPTON_DESTINATIONS.length)];
+}
 
 // Custom vehicle icons
 const createVehicleIcon = (type: string, status: string) => {
@@ -83,11 +124,11 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
-  const routeLinesRef = useRef<L.Polyline[]>([]);
+  const routeControlRef = useRef<any>(null);
   const [vehicleRoutes, setVehicleRoutes] = useState<{[key: string]: Array<{ lat: number; lng: number; timestamp: number }>}>({});
   const [loadingRoutes, setLoadingRoutes] = useState<{[key: string]: boolean}>({});
 
-  // Function to fetch route data for a vehicle
+  // Function to fetch route data for a vehicle using OSRM
   const fetchVehicleRoute = async (vehicleId: string) => {
     setLoadingRoutes(prev => ({ ...prev, [vehicleId]: true }));
     try {
@@ -103,44 +144,92 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
           console.log(`✅ Fetched route for ${vehicleId}:`, waypoints.length, 'points');
         }
       } else {
-        // If database is down, generate a mock route
-        console.log(`🔄 Database unavailable, generating mock route for ${vehicleId}`);
+        // If database is down, generate a realistic route within Compton
+        console.log(`🔄 Database unavailable, generating realistic route for ${vehicleId}`);
         const selectedVehicle = vehicles.find(v => v.id === vehicleId);
         if (selectedVehicle) {
-          // Generate a simple route from current position to a nearby point
-          const mockRoute = [
-            { lat: selectedVehicle.lat, lng: selectedVehicle.lng, timestamp: Date.now() },
-            { lat: selectedVehicle.lat + 0.01, lng: selectedVehicle.lng + 0.01, timestamp: Date.now() + 60000 },
-            { lat: selectedVehicle.lat + 0.02, lng: selectedVehicle.lng + 0.02, timestamp: Date.now() + 120000 },
-            { lat: selectedVehicle.lat + 0.03, lng: selectedVehicle.lng + 0.01, timestamp: Date.now() + 180000 },
-          ];
+          const destination = getRandomComptonDestination();
+          
+          // Try to get OSRM route first
+          try {
+            const osrmResponse = await fetch(
+              `http://localhost:5000/route/v1/driving/${selectedVehicle.lng},${selectedVehicle.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
+            );
+            
+            if (osrmResponse.ok) {
+              const osrmData = await osrmResponse.json();
+              if (osrmData.routes && osrmData.routes[0]) {
+                const coordinates = osrmData.routes[0].geometry.coordinates;
+                const routePoints = coordinates.map((coord: number[], index: number) => ({
+                  lat: coord[1],
+                  lng: coord[0],
+                  timestamp: Date.now() + (index * 30000) // 30 seconds between points
+                }));
+                
+                setVehicleRoutes(prev => ({
+                  ...prev,
+                  [vehicleId]: routePoints
+                }));
+                console.log(`✅ Generated OSRM route for ${vehicleId}:`, routePoints.length, 'points');
+                return;
+              }
+            }
+          } catch (osrmError) {
+            console.log(`⚠️ OSRM unavailable, using fallback route for ${vehicleId}`);
+          }
+          
+          // Fallback: create a route with intermediate points within Compton
+          const mockRoute = generateRealisticRoute(selectedVehicle.lat, selectedVehicle.lng, destination.lat, destination.lng);
           setVehicleRoutes(prev => ({
             ...prev,
             [vehicleId]: mockRoute
           }));
-          console.log(`✅ Generated mock route for ${vehicleId}:`, mockRoute.length, 'points');
+          console.log(`✅ Generated fallback route for ${vehicleId}:`, mockRoute.length, 'points');
         }
       }
     } catch (error) {
       console.error(`❌ Error fetching route for ${vehicleId}:`, error);
-      // Generate mock route on error too
+      // Generate fallback route on error too
       const selectedVehicle = vehicles.find(v => v.id === vehicleId);
       if (selectedVehicle) {
-        const mockRoute = [
-          { lat: selectedVehicle.lat, lng: selectedVehicle.lng, timestamp: Date.now() },
-          { lat: selectedVehicle.lat + 0.01, lng: selectedVehicle.lng + 0.01, timestamp: Date.now() + 60000 },
-          { lat: selectedVehicle.lat + 0.02, lng: selectedVehicle.lng + 0.02, timestamp: Date.now() + 120000 },
-          { lat: selectedVehicle.lat + 0.03, lng: selectedVehicle.lng + 0.01, timestamp: Date.now() + 180000 },
-        ];
+        const destination = getRandomComptonDestination();
+        const mockRoute = generateRealisticRoute(selectedVehicle.lat, selectedVehicle.lng, destination.lat, destination.lng);
         setVehicleRoutes(prev => ({
           ...prev,
           [vehicleId]: mockRoute
         }));
-        console.log(`✅ Generated mock route for ${vehicleId} (fallback):`, mockRoute.length, 'points');
+        console.log(`✅ Generated error fallback route for ${vehicleId}:`, mockRoute.length, 'points');
       }
     } finally {
       setLoadingRoutes(prev => ({ ...prev, [vehicleId]: false }));
     }
+  };
+
+  // Function to generate a realistic route with intermediate points within Compton
+  const generateRealisticRoute = (startLat: number, startLng: number, endLat: number, endLng: number) => {
+    const route = [];
+    const numPoints = 8; // More points for smoother route
+    
+    for (let i = 0; i <= numPoints; i++) {
+      const progress = i / numPoints;
+      
+      // Use cubic bezier curve for more realistic path
+      const t = progress;
+      const lat = startLat + (endLat - startLat) * t + Math.sin(t * Math.PI) * 0.002 * (Math.random() - 0.5);
+      const lng = startLng + (endLng - startLng) * t + Math.sin(t * Math.PI) * 0.002 * (Math.random() - 0.5);
+      
+      // Ensure point is within Compton bounds
+      const boundedLat = Math.max(COMPTON_BOUNDS.south, Math.min(COMPTON_BOUNDS.north, lat));
+      const boundedLng = Math.max(COMPTON_BOUNDS.west, Math.min(COMPTON_BOUNDS.east, lng));
+      
+      route.push({
+        lat: boundedLat,
+        lng: boundedLng,
+        timestamp: Date.now() + (i * 30000) // 30 seconds between points
+      });
+    }
+    
+    return route;
   };
 
   // Fetch route when vehicle is selected
@@ -314,7 +403,7 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
 
   }, []);
 
-  // Update vehicle markers
+  // Update vehicle markers and routes
   useEffect(() => {
     if (!mapInstanceRef.current) return;
 
@@ -323,8 +412,12 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
     // Clear existing markers and routes
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
-    routeLinesRef.current.forEach(line => line.remove());
-    routeLinesRef.current = [];
+    
+    // Remove existing routing control
+    if (routeControlRef.current) {
+      map.removeControl(routeControlRef.current);
+      routeControlRef.current = null;
+    }
 
     // Add vehicle markers
     vehicles.forEach(vehicle => {
@@ -387,47 +480,58 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
       }
 
       markersRef.current.push(marker);
-      
-      // Draw route for selected vehicle
-      if (selectedVehicle === vehicle.id) {
-        const routeData = vehicleRoutes[vehicle.id] || vehicle.route;
-        if (routeData && routeData.length > 0) {
-          console.log(`Drawing route for ${vehicle.id}:`, routeData.length, 'points');
-          
-          const routeCoordinates = routeData.map(point => [point.lat, point.lng] as [number, number]);
-          console.log('Route coordinates:', routeCoordinates.slice(0, 5), '...');
-          
-                  const routeLine = L.polyline(routeCoordinates, {
-          color: '#3b82f6',
-          weight: 4,
-          opacity: 0.8,
-          dashArray: '10, 5'
-        }).addTo(map);
-
-        // Add pulsing animation to the route line
-        const routeElement = routeLine.getElement();
-        if (routeElement && routeElement instanceof HTMLElement) {
-          routeElement.style.animation = 'routePulse 2s ease-in-out infinite';
-        }
-          
-          // Add route info popup
-          routeLine.bindPopup(`
-            <div style="min-width: 200px;">
-              <h3 style="margin: 0 0 8px 0; font-weight: bold;">${vehicle.id} Route</h3>
-              <p style="margin: 4px 0;"><strong>Status:</strong> ${vehicle.status}</p>
-              <p style="margin: 4px 0;"><strong>Route Points:</strong> ${routeData.length}</p>
-              <p style="margin: 4px 0;"><strong>Current Position:</strong> ${vehicle.currentIndex || 0}/${routeData.length}</p>
-              <p style="margin: 4px 0;"><strong>Start:</strong> ${routeCoordinates[0]?.join(', ')}</p>
-              <p style="margin: 4px 0;"><strong>End:</strong> ${routeCoordinates[routeCoordinates.length - 1]?.join(', ')}</p>
-            </div>
-          `);
-          
-          routeLinesRef.current.push(routeLine);
-        }
-      }
     });
 
-  }, [vehicles, selectedVehicle]);
+    // Draw route for selected vehicle using leaflet-routing-machine
+    if (selectedVehicle) {
+      const selectedVehicleData = vehicles.find(v => v.id === selectedVehicle);
+      if (selectedVehicleData) {
+        const routeData = vehicleRoutes[selectedVehicle] || selectedVehicleData.route;
+        
+        if (routeData && routeData.length > 0) {
+          console.log(`Drawing route for ${selectedVehicle}:`, routeData.length, 'points');
+          
+          // Use leaflet-routing-machine for proper street-following routes
+          const waypoints = [
+            L.latLng(selectedVehicleData.lat, selectedVehicleData.lng),
+            L.latLng(routeData[routeData.length - 1].lat, routeData[routeData.length - 1].lng)
+          ];
+          
+                     routeControlRef.current = (L as any).Routing.control({
+             waypoints: waypoints,
+             router: (L as any).Routing.osrmv1({
+               serviceUrl: 'http://localhost:5000/route/v1'
+             }),
+             lineOptions: {
+               styles: [{ 
+                 color: '#3b82f6', 
+                 weight: 4, 
+                 opacity: 0.8,
+                 dashArray: '10, 5'
+               }],
+               extendToWaypoints: true,
+               missingRouteTolerance: 0
+             },
+             createMarker: () => null, // Hide default waypoint markers
+             addWaypoints: false,
+             show: false,
+             showAlternatives: false
+           }).addTo(map);
+
+          // Add pulsing animation to the route line
+          setTimeout(() => {
+            const routeElement = document.querySelector('.leaflet-routing-container .leaflet-routing-alt');
+            if (routeElement && routeElement instanceof HTMLElement) {
+              routeElement.style.animation = 'routePulse 2s ease-in-out infinite';
+            }
+          }, 100);
+          
+          console.log(`✅ Route displayed for ${selectedVehicle} using OSRM`);
+        }
+      }
+    }
+
+  }, [vehicles, selectedVehicle, vehicleRoutes]);
 
   return (
     <div className="absolute inset-4 bg-gradient-to-br from-tesla-gray to-tesla-gray-light rounded-lg border border-border overflow-hidden">

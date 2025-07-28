@@ -65,20 +65,25 @@ export async function getOSRMRoute(
   endLng: number
 ): Promise<RoutePoint[]> {
   try {
+    console.log(`🔄 Fetching OSRM route from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
+    
     const response = await fetch(
       `http://localhost:5000/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`
     );
     
     if (!response.ok) {
-      throw new Error('OSRM route request failed');
+      throw new Error(`OSRM route request failed: ${response.status}`);
     }
     
     const data = await response.json();
+    console.log(`📊 OSRM response:`, data);
     
     if (data.routes && data.routes[0]) {
       const route = data.routes[0];
       const coordinates = route.geometry.coordinates;
       const duration = route.duration; // seconds
+      
+      console.log(`✅ OSRM route found with ${coordinates.length} points, duration: ${duration}s`);
       
       // Convert coordinates to RoutePoint array with timestamps
       const routePoints: RoutePoint[] = [];
@@ -95,10 +100,12 @@ export async function getOSRMRoute(
       return routePoints;
     }
     
-    throw new Error('No route found');
+    throw new Error('No route found in OSRM response');
   } catch (error) {
     console.error('OSRM routing error:', error);
-    // Fallback: create simple straight-line route
+    console.log(`🔄 Falling back to straight line route`);
+    
+    // Fallback to straight line route with intermediate points
     return createStraightLineRoute(startLat, startLng, endLat, endLng);
   }
 }
@@ -110,22 +117,30 @@ function createStraightLineRoute(
   endLat: number, 
   endLng: number
 ): RoutePoint[] {
-  const points = 20;
   const routePoints: RoutePoint[] = [];
+  const numPoints = 10; // More points for smoother movement
   const duration = 15 * 60 * 1000; // 15 minutes in milliseconds
   
-  for (let i = 0; i <= points; i++) {
-    const progress = i / points;
-    const lat = startLat + (endLat - startLat) * progress;
-    const lng = startLng + (endLng - startLng) * progress;
+  for (let i = 0; i <= numPoints; i++) {
+    const progress = i / numPoints;
+    
+    // Use cubic bezier curve for more realistic path
+    const t = progress;
+    const lat = startLat + (endLat - startLat) * t + Math.sin(t * Math.PI) * 0.001 * (Math.random() - 0.5);
+    const lng = startLng + (endLng - startLng) * t + Math.sin(t * Math.PI) * 0.001 * (Math.random() - 0.5);
+    
+    // Ensure point is within Compton bounds (approximate)
+    const boundedLat = Math.max(33.86, Math.min(33.92, lat));
+    const boundedLng = Math.max(-118.27, Math.min(-118.18, lng));
     
     routePoints.push({
-      lat,
-      lng,
+      lat: boundedLat,
+      lng: boundedLng,
       timestamp: Date.now() + (progress * duration)
     });
   }
   
+  console.log(`📏 Created fallback route with ${routePoints.length} points`);
   return routePoints;
 }
 

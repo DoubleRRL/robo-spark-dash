@@ -51,7 +51,7 @@ class RealisticVehicleSimulator {
 
   private updateVehicles() {
     this.vehicles = this.vehicles.map(vehicle => {
-      let updatedVehicle = updateVehiclePosition(vehicle);
+      const updatedVehicle = updateVehiclePosition(vehicle);
       
       // Handle trip completion
       if (updatedVehicle.status === 'busy' && 
@@ -80,6 +80,20 @@ class RealisticVehicleSimulator {
         updatedVehicle.currentIndex = 0;
         updatedVehicle.speed = 0;
         console.log(`🔌 Vehicle ${updatedVehicle.id} arrived at charging station`);
+      }
+      
+      // Log vehicle movement for debugging
+      if (updatedVehicle.status === 'busy' && updatedVehicle.route.length > 0) {
+        const currentPoint = updatedVehicle.route[updatedVehicle.currentIndex];
+        const isAtPickup = updatedVehicle.pickup && 
+          Math.abs(updatedVehicle.lat - updatedVehicle.pickup.lat) < 0.001 &&
+          Math.abs(updatedVehicle.lng - updatedVehicle.pickup.lng) < 0.001;
+        
+        if (isAtPickup && updatedVehicle.currentIndex < updatedVehicle.route.length / 2) {
+          console.log(`🚗 Vehicle ${updatedVehicle.id} arrived at pickup: ${updatedVehicle.pickup?.name}`);
+        }
+        
+        console.log(`📍 Vehicle ${updatedVehicle.id} at ${updatedVehicle.lat.toFixed(4)}, ${updatedVehicle.lng.toFixed(4)} - Status: ${updatedVehicle.status} - Speed: ${updatedVehicle.speed.toFixed(1)} mph`);
       }
       
       // Send low battery vehicles to charging
@@ -139,6 +153,10 @@ class RealisticVehicleSimulator {
       
       if (nearestVehicle) {
         try {
+          console.log(`🚕 Assigning trip ${trip.id} to vehicle ${nearestVehicle.vehicle.id}`);
+          console.log(`📍 Pickup: ${trip.pickup.name} (${trip.pickup.lat.toFixed(4)}, ${trip.pickup.lng.toFixed(4)})`);
+          console.log(`🎯 Destination: ${trip.destination.name} (${trip.destination.lat.toFixed(4)}, ${trip.destination.lng.toFixed(4)})`);
+          
           const updatedVehicle = await assignTripToVehicle(
             nearestVehicle.vehicle,
             trip.pickup,
@@ -149,6 +167,8 @@ class RealisticVehicleSimulator {
           const index = this.vehicles.findIndex(v => v.id === updatedVehicle.id);
           if (index !== -1) {
             this.vehicles[index] = updatedVehicle;
+            console.log(`✅ Vehicle ${updatedVehicle.id} now has route with ${updatedVehicle.route.length} points`);
+            console.log(`🚗 Vehicle ${updatedVehicle.id} starting from (${updatedVehicle.lat.toFixed(4)}, ${updatedVehicle.lng.toFixed(4)})`);
           }
           
           // Remove trip from queue
