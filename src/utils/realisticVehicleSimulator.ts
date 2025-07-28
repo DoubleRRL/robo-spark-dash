@@ -203,6 +203,9 @@ class RealisticVehicleSimulator {
 
   private sendUpdates() {
     this.vehicles.forEach(vehicle => {
+      // Generate realistic diagnostic data
+      const diagnostics = this.generateDiagnostics(vehicle);
+      
       const update = {
         id: vehicle.id,
         type: this.getVehicleType(vehicle.id),
@@ -214,11 +217,94 @@ class RealisticVehicleSimulator {
         battery: Math.round(vehicle.battery),
         speed: Math.round(vehicle.speed),
         eta: this.calculateETA(vehicle),
-        heading: this.calculateHeading(vehicle)
+        heading: this.calculateHeading(vehicle),
+        diagnostics: diagnostics
       };
       
       this.socket.emit('vehicle-update', update);
     });
+  }
+
+  private generateDiagnostics(vehicle: VehicleRoute) {
+    const vehicleType = this.getVehicleType(vehicle.id);
+    
+    // Camera occlusion - 2% chance of being bad, only set once on app load
+    const cameraOcclusion = Math.random() < 0.02 ? 'bad' : 'good';
+    
+    // Tire pressure based on vehicle type
+    const targetPSI = vehicleType === 'cybertruck' ? 50 : 42;
+    const tirePressure = [
+      targetPSI + (Math.random() - 0.5) * 4, // Front left
+      targetPSI + (Math.random() - 0.5) * 4, // Front right  
+      targetPSI + (Math.random() - 0.5) * 4, // Rear left
+      targetPSI + (Math.random() - 0.5) * 4  // Rear right
+    ];
+    
+    // FSD errors - random count, higher chance when battery is low
+    const fsdErrors = vehicle.battery < 30 ? 
+      Math.floor(Math.random() * 5) + 1 : 
+      Math.floor(Math.random() * 3);
+    
+    // Motor temperature based on status and speed
+    const baseTemp = 45;
+    const speedFactor = vehicle.speed / 60; // Higher speed = higher temp
+    const statusFactor = vehicle.status === 'busy' ? 1.2 : 1.0;
+    const motorTemperature = baseTemp + (speedFactor * 20 * statusFactor) + (Math.random() - 0.5) * 10;
+    
+    return {
+      cameraOcclusion,
+      tirePressure,
+      fsdErrors,
+      motorTemperature: Math.round(motorTemperature * 10) / 10,
+      alerts: this.generateAlerts(vehicle, cameraOcclusion, tirePressure, fsdErrors)
+    };
+  }
+
+  private generateAlerts(vehicle: VehicleRoute, cameraOcclusion: string, tirePressure: number[], fsdErrors: number) {
+    const alerts = [];
+    
+    if (cameraOcclusion === 'bad') {
+      alerts.push({
+        id: 'camera-occlusion',
+        message: 'Camera system occluded',
+        recommendedAction: 'Remove vehicle from fleet immediately',
+        severity: 'critical',
+        category: 'safety'
+      });
+    }
+    
+    if (vehicle.battery <= 20) {
+      alerts.push({
+        id: 'low-battery',
+        message: 'Battery level critical',
+        recommendedAction: 'Vehicle will proceed to charging station',
+        severity: 'warning',
+        category: 'battery'
+      });
+    }
+    
+    const lowTirePressure = tirePressure.some(p => p < 38);
+    if (lowTirePressure) {
+      alerts.push({
+        id: 'low-tire-pressure',
+        message: 'Low tire pressure detected',
+        recommendedAction: 'Check tire pressure at next service',
+        severity: 'warning',
+        category: 'mechanical'
+      });
+    }
+    
+    if (fsdErrors > 3) {
+      alerts.push({
+        id: 'fsd-errors',
+        message: 'Multiple FSD errors detected',
+        recommendedAction: 'Review vehicle logs and consider maintenance',
+        severity: 'warning',
+        category: 'autonomy'
+      });
+    }
+    
+    return alerts;
   }
 
   private getVehicleType(vehicleId: string): string {

@@ -42,6 +42,7 @@ export const useSocket = (): UseSocketReturn => {
   const [vehicles, setVehicles] = useState<VehicleUpdate[]>([]);
   const [lastUpdate, setLastUpdate] = useState<VehicleUpdate | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const vehiclesRef = useRef<VehicleUpdate[]>([]);
 
   useEffect(() => {
     // create socket connection
@@ -68,10 +69,19 @@ export const useSocket = (): UseSocketReturn => {
       setLastUpdate(data);
       
       setVehicles(prev => {
-        const existing = prev.find(v => v.id === data.id);
-        if (existing) {
-          return prev.map(v => v.id === data.id ? { ...v, ...data } : v);
+        const existingIndex = prev.findIndex(v => v.id === data.id);
+        
+        if (existingIndex !== -1) {
+          // Update existing vehicle by creating a new array but preserving object references
+          const newVehicles = [...prev];
+          // Only update the specific vehicle that changed
+          newVehicles[existingIndex] = {
+            ...newVehicles[existingIndex], // Preserve existing properties
+            ...data // Override with new data
+          };
+          return newVehicles;
         } else {
+          // Add new vehicle
           return [...prev, data];
         }
       });
