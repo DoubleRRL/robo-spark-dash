@@ -130,34 +130,50 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
 
   // Function to fetch route data for a vehicle using OSRM
   const fetchVehicleRoute = async (vehicleId: string) => {
+    console.log(`🔄 Starting route fetch for vehicle: ${vehicleId}`);
     setLoadingRoutes(prev => ({ ...prev, [vehicleId]: true }));
     try {
       const response = await fetch(`http://localhost:8000/api/v1/vehicles/${vehicleId}/route`);
+      console.log(`📡 Backend response status:`, response.status);
+      
       if (response.ok) {
         const routeData = await response.json();
+        console.log(`📊 Backend route data:`, routeData);
+        
         if (routeData && routeData.waypoints) {
           const waypoints = JSON.parse(routeData.waypoints);
+          console.log(`🗺️ Parsed waypoints:`, waypoints);
+          
           setVehicleRoutes(prev => ({
             ...prev,
             [vehicleId]: waypoints
           }));
           console.log(`✅ Fetched route for ${vehicleId}:`, waypoints.length, 'points');
+        } else {
+          console.log(`⚠️ No waypoints in backend response`);
         }
       } else {
         // If database is down, generate a realistic route within Compton
-        console.log(`🔄 Database unavailable, generating realistic route for ${vehicleId}`);
+        console.log(`🔄 Database unavailable (${response.status}), generating realistic route for ${vehicleId}`);
         const selectedVehicle = vehicles.find(v => v.id === vehicleId);
         if (selectedVehicle) {
+          console.log(`📊 Using vehicle data for fallback route:`, selectedVehicle);
           const destination = getRandomComptonDestination();
+          console.log(`🎯 Fallback destination:`, destination);
           
           // Try to get OSRM route first
           try {
+            console.log(`🔄 Attempting OSRM route for fallback...`);
             const osrmResponse = await fetch(
               `http://localhost:5000/route/v1/driving/${selectedVehicle.lng},${selectedVehicle.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
             );
             
+            console.log(`📡 OSRM response status:`, osrmResponse.status);
+            
             if (osrmResponse.ok) {
               const osrmData = await osrmResponse.json();
+              console.log(`📊 OSRM data:`, osrmData);
+              
               if (osrmData.routes && osrmData.routes[0]) {
                 const coordinates = osrmData.routes[0].geometry.coordinates;
                 const routePoints = coordinates.map((coord: number[], index: number) => ({
@@ -166,25 +182,35 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
                   timestamp: Date.now() + (index * 30000) // 30 seconds between points
                 }));
                 
+                console.log(`✅ Generated OSRM route points:`, routePoints.length);
+                
                 setVehicleRoutes(prev => ({
                   ...prev,
                   [vehicleId]: routePoints
                 }));
                 console.log(`✅ Generated OSRM route for ${vehicleId}:`, routePoints.length, 'points');
                 return;
+              } else {
+                console.log(`⚠️ No routes in OSRM response`);
               }
+            } else {
+              console.log(`⚠️ OSRM request failed:`, osrmResponse.status);
             }
           } catch (osrmError) {
-            console.log(`⚠️ OSRM unavailable, using fallback route for ${vehicleId}`);
+            console.log(`⚠️ OSRM unavailable, using fallback route for ${vehicleId}:`, osrmError);
           }
           
           // Fallback: create a route with intermediate points within Compton
           const mockRoute = generateRealisticRoute(selectedVehicle.lat, selectedVehicle.lng, destination.lat, destination.lng);
+          console.log(`📏 Generated fallback route:`, mockRoute.length, 'points');
+          
           setVehicleRoutes(prev => ({
             ...prev,
             [vehicleId]: mockRoute
           }));
           console.log(`✅ Generated fallback route for ${vehicleId}:`, mockRoute.length, 'points');
+        } else {
+          console.log(`❌ Vehicle not found for fallback route generation`);
         }
       }
     } catch (error) {
@@ -192,6 +218,7 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
       // Generate fallback route on error too
       const selectedVehicle = vehicles.find(v => v.id === vehicleId);
       if (selectedVehicle) {
+        console.log(`🔄 Generating error fallback route for ${vehicleId}`);
         const destination = getRandomComptonDestination();
         const mockRoute = generateRealisticRoute(selectedVehicle.lat, selectedVehicle.lng, destination.lat, destination.lng);
         setVehicleRoutes(prev => ({
@@ -202,6 +229,7 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
       }
     } finally {
       setLoadingRoutes(prev => ({ ...prev, [vehicleId]: false }));
+      console.log(`🏁 Finished route fetch for vehicle: ${vehicleId}`);
     }
   };
 
@@ -484,12 +512,20 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
 
     // Draw route for selected vehicle using leaflet-routing-machine
     if (selectedVehicle) {
+      console.log(`🔍 Attempting to draw route for selected vehicle: ${selectedVehicle}`);
       const selectedVehicleData = vehicles.find(v => v.id === selectedVehicle);
+      
       if (selectedVehicleData) {
+        console.log(`📊 Selected vehicle data:`, selectedVehicleData);
         const routeData = vehicleRoutes[selectedVehicle] || selectedVehicleData.route;
         
+        console.log(`🗺️ Route data found:`, routeData);
+        console.log(`📏 Route data length:`, routeData?.length || 0);
+        
         if (routeData && routeData.length > 0) {
-          console.log(`Drawing route for ${selectedVehicle}:`, routeData.length, 'points');
+          console.log(`🎯 Drawing route for ${selectedVehicle}:`, routeData.length, 'points');
+          console.log(`📍 Route start:`, routeData[0]);
+          console.log(`📍 Route end:`, routeData[routeData.length - 1]);
           
           // Use leaflet-routing-machine for proper street-following routes
           const waypoints = [
@@ -497,38 +533,58 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
             L.latLng(routeData[routeData.length - 1].lat, routeData[routeData.length - 1].lng)
           ];
           
-                     routeControlRef.current = (L as any).Routing.control({
-             waypoints: waypoints,
-             router: (L as any).Routing.osrmv1({
-               serviceUrl: 'http://localhost:5000/route/v1'
-             }),
-             lineOptions: {
-               styles: [{ 
-                 color: '#3b82f6', 
-                 weight: 4, 
-                 opacity: 0.8,
-                 dashArray: '10, 5'
-               }],
-               extendToWaypoints: true,
-               missingRouteTolerance: 0
-             },
-             createMarker: () => null, // Hide default waypoint markers
-             addWaypoints: false,
-             show: false,
-             showAlternatives: false
-           }).addTo(map);
-
-          // Add pulsing animation to the route line
-          setTimeout(() => {
-            const routeElement = document.querySelector('.leaflet-routing-container .leaflet-routing-alt');
-            if (routeElement && routeElement instanceof HTMLElement) {
-              routeElement.style.animation = 'routePulse 2s ease-in-out infinite';
-            }
-          }, 100);
+          console.log(`🎯 Waypoints for routing:`, waypoints);
           
-          console.log(`✅ Route displayed for ${selectedVehicle} using OSRM`);
+          try {
+            routeControlRef.current = (L as any).Routing.control({
+              waypoints: waypoints,
+              router: (L as any).Routing.osrmv1({
+                serviceUrl: 'http://localhost:5000/route/v1'
+              }),
+              lineOptions: {
+                styles: [{ 
+                  color: '#3b82f6', 
+                  weight: 4, 
+                  opacity: 0.8,
+                  dashArray: '10, 5'
+                }],
+                extendToWaypoints: true,
+                missingRouteTolerance: 0
+              },
+              createMarker: () => null, // Hide default waypoint markers
+              addWaypoints: false,
+              show: false,
+              showAlternatives: false
+            }).addTo(map);
+
+            console.log(`✅ Routing control created and added to map`);
+
+            // Add pulsing animation to the route line
+            setTimeout(() => {
+              const routeElement = document.querySelector('.leaflet-routing-container .leaflet-routing-alt');
+              if (routeElement && routeElement instanceof HTMLElement) {
+                routeElement.style.animation = 'routePulse 2s ease-in-out infinite';
+                console.log(`✨ Route animation applied`);
+              } else {
+                console.log(`⚠️ Route element not found for animation`);
+              }
+            }, 100);
+            
+            console.log(`✅ Route displayed for ${selectedVehicle} using OSRM`);
+          } catch (error) {
+            console.error(`❌ Error creating routing control:`, error);
+          }
+        } else {
+          console.log(`⚠️ No route data available for ${selectedVehicle}`);
+          console.log(`🔍 Vehicle routes state:`, vehicleRoutes);
+          console.log(`🔍 Selected vehicle route:`, selectedVehicleData.route);
         }
+      } else {
+        console.log(`❌ Selected vehicle data not found for ID: ${selectedVehicle}`);
+        console.log(`🔍 Available vehicles:`, vehicles.map(v => ({ id: v.id, status: v.status })));
       }
+    } else {
+      console.log(`🔍 No vehicle selected, clearing routes`);
     }
 
   }, [vehicles, selectedVehicle, vehicleRoutes]);

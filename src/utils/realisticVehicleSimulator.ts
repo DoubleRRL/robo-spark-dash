@@ -56,11 +56,20 @@ class RealisticVehicleSimulator {
       // Handle trip completion
       if (updatedVehicle.status === 'busy' && 
           updatedVehicle.currentIndex >= updatedVehicle.route.length - 1) {
-        updatedVehicle.status = 'available';
+        updatedVehicle.status = 'idle'; // Change to idle instead of available
         updatedVehicle.route = [];
         updatedVehicle.currentIndex = 0;
         updatedVehicle.speed = 0;
-        console.log(`✅ Vehicle ${updatedVehicle.id} completed trip`);
+        console.log(`✅ Vehicle ${updatedVehicle.id} completed trip, now idle`);
+        
+        // Set a timer to make vehicle available again after idle time
+        setTimeout(() => {
+          const vehicleIndex = this.vehicles.findIndex(v => v.id === updatedVehicle.id);
+          if (vehicleIndex !== -1) {
+            this.vehicles[vehicleIndex].status = 'available';
+            console.log(`🚗 Vehicle ${updatedVehicle.id} became available after idle time`);
+          }
+        }, Math.random() * 10000 + 5000); // 5-15 seconds of idle time
       }
       
       // Handle charging completion

@@ -281,6 +281,17 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* Vehicle Diagnostics - moved from right sidebar */}
+          {selectedVehicle && (
+            <div className="p-4 border-t border-border">
+              <VehicleDiagnosticsCard 
+                diagnostics={vehicles.find(v => v.id === selectedVehicle)?.diagnostics || null}
+                vehicleType={vehicles.find(v => v.id === selectedVehicle)?.type || 'default'}
+                battery={vehicles.find(v => v.id === selectedVehicle)?.battery || 0}
+              />
+            </div>
+          )}
         </div>
 
         {/* Center Map Area */}
@@ -316,17 +327,6 @@ export default function Dashboard() {
                   Remote Diagnostics
                 </Button>
               </div>
-            </div>
-          )}
-
-          {/* Vehicle Diagnostics */}
-          {selectedVehicle && (
-            <div className="p-4 border-b border-border h-96">
-              <VehicleDiagnosticsCard 
-                diagnostics={vehicles.find(v => v.id === selectedVehicle)?.diagnostics || null}
-                vehicleType={vehicles.find(v => v.id === selectedVehicle)?.type || 'default'}
-                battery={vehicles.find(v => v.id === selectedVehicle)?.battery || 0}
-              />
             </div>
           )}
 

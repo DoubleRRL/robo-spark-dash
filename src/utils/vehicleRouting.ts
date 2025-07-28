@@ -44,7 +44,7 @@ export interface VehicleRoute {
   currentIndex: number;
   startTime: number;
   estimatedDuration: number; // in minutes
-  status: 'available' | 'busy' | 'charging' | 'en-route-to-charging';
+  status: 'available' | 'busy' | 'charging' | 'en-route-to-charging' | 'idle';
   battery: number;
   speed: number; // mph
 }
