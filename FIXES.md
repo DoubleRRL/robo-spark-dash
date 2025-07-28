@@ -12,12 +12,12 @@
 ### 2. Routes Cutting Through Buildings
 - **Problem**: Routes were straight lines that cut through buildings instead of following roads.
 - **Fix**: 
-  - Improved route generation to use OSRM for realistic road-following routes
-  - Added fallback curved routes when OSRM is unavailable
+  - Improved route generation to use Google Maps Directions API for realistic road-following routes
+  - Added fallback curved routes when Google Maps API is unavailable
   - Ensured all route points stay within the Compton polygon boundary
 - **Files Modified**:
   - `realisticVehicleSimulator.cjs`: Enhanced `createRealisticRoute()` function
-  - `src/components/LeafletMapComponent.tsx`: Updated route generation
+  - `src/components/GoogleMapComponent.tsx`: Updated route generation
 
 ### 3. App Crashing When Selecting Vehicles
 - **Problem**: Selecting vehicles caused the app to crash with `TypeError: control2.remove is not a function`.
@@ -83,10 +83,12 @@ function constrainToCompton(lat, lng) {
 ```
 
 ## Testing
-1. Start the backend: `npm run dev:backend`
-2. Start the frontend: `npm run dev:frontend`
-3. Start the simulator: `node realisticVehicleSimulator.cjs`
-4. Open the app in your browser at `http://localhost:8080`
+1. Start all services: `npm run dev:all`
+2. Or run separately:
+   - Backend: `npm run dev:backend`
+   - Frontend: `npm run dev:frontend`
+   - Simulator: `npm run dev:simulator`
+3. Open the app in your browser at `http://localhost:8080`
 
 You should now see:
 - All vehicles staying within the Compton boundary
