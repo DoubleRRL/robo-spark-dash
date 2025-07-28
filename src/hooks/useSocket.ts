@@ -24,6 +24,7 @@ interface VehicleUpdate {
   eta: string;
   heading: number;
   route?: RoutePoint[];
+  currentIndex?: number;
   pickupLocation?: Location;
   destination?: Location;
   diagnostics?: any; // Add diagnostics field

@@ -122,8 +122,8 @@ io.of('/vehicles').on('connection', socket => {
 // Initialize database and start server
 async function startServer() {
   try {
-    await initDb();
-    console.log('Database initialized successfully');
+    // await initDb();
+    console.log('Database initialization skipped (not needed for demo)');
     
     app.get('/health', (req, res) => res.send('ok'));
 

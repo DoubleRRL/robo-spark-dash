@@ -73,7 +73,7 @@ export interface DiagnosticAlert {
 // Generate realistic diagnostic data
 export function generateVehicleDiagnostics(vehicleId: string, baseData: any): VehicleDiagnostics {
   const now = Date.now();
-  const batteryLevel = baseData.battery || 85;
+  const batteryLevel = Math.round(baseData.battery || 85);
   
   // Simulate realistic diagnostic variations
   const batteryHealth = batteryLevel > 80 ? 'excellent' : 
@@ -207,43 +207,51 @@ export function generateVehicleDiagnostics(vehicleId: string, baseData: any): Ve
 // Remote diagnostic functions that would be used in real AV fleets
 export class RemoteDiagnostics {
   // Analyze vehicle health and predict maintenance needs
-  static analyzeVehicleHealth(diagnostics: VehicleDiagnostics): {
+  static analyzeVehicleHealth(diagnostics: VehicleDiagnostics | null): {
     overallHealth: number; // 0-100
     recommendations: string[];
     predictedIssues: string[];
   } {
+    if (!diagnostics) {
+      return {
+        overallHealth: 0,
+        recommendations: ['No diagnostic data available'],
+        predictedIssues: ['Unable to analyze vehicle health']
+      };
+    }
+    
     let healthScore = 100;
     const recommendations: string[] = [];
     const predictedIssues: string[] = [];
     
     // Battery health analysis
-    if (diagnostics.battery.health === 'poor') {
+    if (diagnostics.battery?.health === 'poor') {
       healthScore -= 20;
       recommendations.push('Schedule battery replacement within 30 days');
       predictedIssues.push('Battery failure within 2-3 months');
-    } else if (diagnostics.battery.health === 'fair') {
+    } else if (diagnostics.battery?.health === 'fair') {
       healthScore -= 10;
       recommendations.push('Monitor battery health closely');
     }
     
     // Sensor health analysis
-    if (diagnostics.autonomy.lidarStatus !== 'operational' ||
-        diagnostics.autonomy.cameraStatus !== 'operational' ||
-        diagnostics.autonomy.radarStatus !== 'operational') {
+    if (diagnostics.autonomy?.lidarStatus !== 'operational' ||
+        diagnostics.autonomy?.cameraStatus !== 'operational' ||
+        diagnostics.autonomy?.radarStatus !== 'operational') {
       healthScore -= 15;
       recommendations.push('Schedule sensor maintenance immediately');
       predictedIssues.push('Autonomous driving capability may be compromised');
     }
     
     // Tire pressure analysis
-    const lowTirePressure = diagnostics.mechanical.tirePressure.some(p => p < 30);
+    const lowTirePressure = diagnostics.mechanical?.tirePressure?.some(p => p < 30) || false;
     if (lowTirePressure) {
       healthScore -= 5;
       recommendations.push('Inflate tires to recommended pressure');
     }
     
     // Brake wear analysis
-    const lowBrakeWear = diagnostics.mechanical.brakeWear.some(w => w < 70);
+    const lowBrakeWear = diagnostics.mechanical?.brakeWear?.some(w => w < 70) || false;
     if (lowBrakeWear) {
       healthScore -= 10;
       recommendations.push('Schedule brake pad replacement');
@@ -251,7 +259,7 @@ export class RemoteDiagnostics {
     }
     
     // Performance analysis
-    if (diagnostics.performance.efficiencyScore < 80) {
+    if ((diagnostics.performance?.efficiencyScore || 0) < 80) {
       healthScore -= 5;
       recommendations.push('Review driving patterns for efficiency improvements');
     }
@@ -264,36 +272,43 @@ export class RemoteDiagnostics {
   }
   
   // Generate maintenance schedule based on diagnostics
-  static generateMaintenanceSchedule(diagnostics: VehicleDiagnostics): {
+  static generateMaintenanceSchedule(diagnostics: VehicleDiagnostics | null): {
     immediate: string[];
     scheduled: string[];
     preventive: string[];
   } {
+    if (!diagnostics) {
+      return {
+        immediate: [],
+        scheduled: [],
+        preventive: []
+      };
+    }
     const immediate: string[] = [];
     const scheduled: string[] = [];
     const preventive: string[] = [];
     
     // Critical issues requiring immediate attention
-    if (diagnostics.battery.level < 20) {
+    if ((diagnostics.battery?.level || 0) < 20) {
       immediate.push('Emergency charging required');
     }
     
-    if (diagnostics.autonomy.lidarStatus === 'fault' ||
-        diagnostics.autonomy.cameraStatus === 'fault' ||
-        diagnostics.autonomy.radarStatus === 'fault') {
+    if (diagnostics.autonomy?.lidarStatus === 'fault' ||
+        diagnostics.autonomy?.cameraStatus === 'fault' ||
+        diagnostics.autonomy?.radarStatus === 'fault') {
       immediate.push('Sensor system repair required');
     }
     
     // Scheduled maintenance based on usage and wear
-    if (diagnostics.battery.cycles > 800) {
+    if ((diagnostics.battery?.cycles || 0) > 800) {
       scheduled.push('Battery health check and potential replacement');
     }
     
-    if (diagnostics.mechanical.brakeWear.some(w => w < 60)) {
+    if (diagnostics.mechanical?.brakeWear?.some(w => w < 60) || false) {
       scheduled.push('Brake system maintenance');
     }
     
-    if (diagnostics.autonomy.sensorCalibration === 'needs_calibration') {
+    if (diagnostics.autonomy?.sensorCalibration === 'needs_calibration') {
       scheduled.push('Sensor calibration and alignment');
     }
     
@@ -307,38 +322,45 @@ export class RemoteDiagnostics {
   }
   
   // Remote troubleshooting based on diagnostic data
-  static remoteTroubleshoot(diagnostics: VehicleDiagnostics): {
+  static remoteTroubleshoot(diagnostics: VehicleDiagnostics | null): {
     canResolveRemotely: boolean;
     actions: string[];
     requiresTechnician: boolean;
   } {
+    if (!diagnostics) {
+      return {
+        canResolveRemotely: false,
+        actions: ['No diagnostic data available for troubleshooting'],
+        requiresTechnician: true
+      };
+    }
     const actions: string[] = [];
     let canResolveRemotely = true;
     let requiresTechnician = false;
     
     // Remote fixes
-    if (diagnostics.autonomy.sensorCalibration === 'needs_calibration') {
+    if (diagnostics.autonomy?.sensorCalibration === 'needs_calibration') {
       actions.push('Initiate remote sensor calibration procedure');
     }
     
-    if (diagnostics.battery.level < 20) {
+    if ((diagnostics.battery?.level || 0) < 20) {
       actions.push('Route vehicle to nearest charging station');
     }
     
-    if (diagnostics.performance.efficiencyScore < 80) {
+    if ((diagnostics.performance?.efficiencyScore || 0) < 80) {
       actions.push('Update driving parameters for better efficiency');
     }
     
     // Issues requiring technician
-    if (diagnostics.autonomy.lidarStatus === 'fault' ||
-        diagnostics.autonomy.cameraStatus === 'fault' ||
-        diagnostics.autonomy.radarStatus === 'fault') {
+    if (diagnostics.autonomy?.lidarStatus === 'fault' ||
+        diagnostics.autonomy?.cameraStatus === 'fault' ||
+        diagnostics.autonomy?.radarStatus === 'fault') {
       requiresTechnician = true;
       canResolveRemotely = false;
       actions.push('Schedule technician visit for sensor repair');
     }
     
-    if (diagnostics.mechanical.brakeWear.some(w => w < 50)) {
+    if (diagnostics.mechanical?.brakeWear?.some(w => w < 50) || false) {
       requiresTechnician = true;
       canResolveRemotely = false;
       actions.push('Schedule brake system maintenance');

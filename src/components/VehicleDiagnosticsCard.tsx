@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react';
 import { VehicleDiagnostics, RemoteDiagnostics } from '@/utils/vehicleDiagnostics';
 
 interface VehicleDiagnosticsCardProps {
-  diagnostics: VehicleDiagnostics;
+  diagnostics: VehicleDiagnostics | null;
 }
 
 export default function VehicleDiagnosticsCard({ diagnostics }: VehicleDiagnosticsCardProps) {
@@ -25,9 +25,9 @@ export default function VehicleDiagnosticsCard({ diagnostics }: VehicleDiagnosti
     );
   }
 
-  const healthAnalysis = RemoteDiagnostics.analyzeVehicleHealth(diagnostics);
-  const maintenanceSchedule = RemoteDiagnostics.generateMaintenanceSchedule(diagnostics);
-  const troubleshooting = RemoteDiagnostics.remoteTroubleshoot(diagnostics);
+  const healthAnalysis = diagnostics ? RemoteDiagnostics.analyzeVehicleHealth(diagnostics) : { overallHealth: 0 };
+  const maintenanceSchedule = diagnostics ? RemoteDiagnostics.generateMaintenanceSchedule(diagnostics) : [];
+  const troubleshooting = diagnostics ? RemoteDiagnostics.remoteTroubleshoot(diagnostics) : [];
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
@@ -74,69 +74,71 @@ export default function VehicleDiagnosticsCard({ diagnostics }: VehicleDiagnosti
         </div>
 
         {/* Battery Status */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <h4 className="text-sm font-medium mb-2">Battery</h4>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span>Level:</span>
-                <span>{diagnostics.battery.level}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Health:</span>
-                <Badge variant="outline" className="text-xs">
-                  {diagnostics.battery.health}
-                </Badge>
-              </div>
-              <div className="flex justify-between">
-                <span>Temperature:</span>
-                <span>{diagnostics.battery.temperature.toFixed(1)}°C</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Range:</span>
-                <span>{diagnostics.battery.estimatedRange.toFixed(0)} mi</span>
+        {diagnostics && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h4 className="text-sm font-medium mb-2">Battery</h4>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span>Level:</span>
+                  <span>{diagnostics.battery?.level || 0}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Health:</span>
+                  <Badge variant="outline" className="text-xs">
+                    {diagnostics.battery?.health || 'Unknown'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>Temperature:</span>
+                  <span>{(diagnostics.battery?.temperature || 0).toFixed(1)}°C</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Range:</span>
+                  <span>{(diagnostics.battery?.estimatedRange || 0).toFixed(0)} mi</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Autonomous Systems */}
-          <div>
-            <h4 className="text-sm font-medium mb-2">Autonomous Systems</h4>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span>LiDAR:</span>
-                <Badge 
-                  variant={diagnostics.autonomy.lidarStatus === 'operational' ? 'default' : 'destructive'}
-                  className="text-xs"
-                >
-                  {diagnostics.autonomy.lidarStatus}
-                </Badge>
-              </div>
-              <div className="flex justify-between">
-                <span>Camera:</span>
-                <Badge 
-                  variant={diagnostics.autonomy.cameraStatus === 'operational' ? 'default' : 'destructive'}
-                  className="text-xs"
-                >
-                  {diagnostics.autonomy.cameraStatus}
-                </Badge>
-              </div>
-              <div className="flex justify-between">
-                <span>Radar:</span>
-                <Badge 
-                  variant={diagnostics.autonomy.radarStatus === 'operational' ? 'default' : 'destructive'}
-                  className="text-xs"
-                >
-                  {diagnostics.autonomy.radarStatus}
-                </Badge>
-              </div>
-              <div className="flex justify-between">
-                <span>GPS Accuracy:</span>
-                <span>{diagnostics.autonomy.gpsAccuracy.toFixed(1)}m</span>
+            {/* Autonomous Systems */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Autonomous Systems</h4>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span>LiDAR:</span>
+                  <Badge 
+                    variant={diagnostics.autonomy?.lidarStatus === 'operational' ? 'default' : 'destructive'}
+                    className="text-xs"
+                  >
+                    {diagnostics.autonomy?.lidarStatus || 'Unknown'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>Camera:</span>
+                  <Badge 
+                    variant={diagnostics.autonomy?.cameraStatus === 'operational' ? 'default' : 'destructive'}
+                    className="text-xs"
+                  >
+                    {diagnostics.autonomy?.cameraStatus || 'Unknown'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>Radar:</span>
+                  <Badge 
+                    variant={diagnostics.autonomy?.radarStatus === 'operational' ? 'default' : 'destructive'}
+                    className="text-xs"
+                  >
+                    {diagnostics.autonomy?.radarStatus || 'Unknown'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>GPS Accuracy:</span>
+                  <span>{(diagnostics.autonomy?.gpsAccuracy || 0).toFixed(1)}m</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Mechanical Systems */}
         <div>
@@ -147,7 +149,7 @@ export default function VehicleDiagnosticsCard({ diagnostics }: VehicleDiagnosti
                 <span>Tire Pressure:</span>
               </div>
               <div className="grid grid-cols-4 gap-1">
-                {diagnostics.mechanical.tirePressure.map((pressure, index) => (
+                {(diagnostics.mechanical?.tirePressure || [32, 32, 32, 32]).map((pressure, index) => (
                   <div key={index} className="text-center">
                     <div className={`text-xs ${pressure < 30 ? 'text-red-500' : 'text-green-500'}`}>
                       {pressure.toFixed(0)} PSI
@@ -159,15 +161,15 @@ export default function VehicleDiagnosticsCard({ diagnostics }: VehicleDiagnosti
             <div>
               <div className="flex justify-between">
                 <span>Motor Temp:</span>
-                <span>{diagnostics.mechanical.motorTemperature.toFixed(1)}°C</span>
+                <span>{(diagnostics.mechanical?.motorTemperature || 0).toFixed(1)}°C</span>
               </div>
               <div className="flex justify-between">
                 <span>Transmission:</span>
                 <Badge 
-                  variant={diagnostics.mechanical.transmissionStatus === 'normal' ? 'default' : 'destructive'}
+                  variant={diagnostics.mechanical?.transmissionStatus === 'normal' ? 'default' : 'destructive'}
                   className="text-xs"
                 >
-                  {diagnostics.mechanical.transmissionStatus}
+                  {diagnostics.mechanical?.transmissionStatus || 'Unknown'}
                 </Badge>
               </div>
             </div>
@@ -181,28 +183,28 @@ export default function VehicleDiagnosticsCard({ diagnostics }: VehicleDiagnosti
             <div>
               <div className="flex justify-between">
                 <span>Efficiency Score:</span>
-                <span>{diagnostics.performance.efficiencyScore.toFixed(0)}%</span>
+                <span>{(diagnostics.performance?.efficiencyScore || 0).toFixed(0)}%</span>
               </div>
               <div className="flex justify-between">
                 <span>Avg Speed:</span>
-                <span>{diagnostics.performance.averageSpeed.toFixed(0)} mph</span>
+                <span>{(diagnostics.performance?.averageSpeed || 0).toFixed(0)} mph</span>
               </div>
             </div>
             <div>
               <div className="flex justify-between">
                 <span>Harsh Events:</span>
-                <span>{diagnostics.performance.accelerationEvents + diagnostics.performance.brakingEvents + diagnostics.performance.corneringEvents}</span>
+                <span>{(diagnostics.performance?.accelerationEvents || 0) + (diagnostics.performance?.brakingEvents || 0) + (diagnostics.performance?.corneringEvents || 0)}</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Alerts */}
-        {diagnostics.alerts.length > 0 && (
+        {(diagnostics.alerts?.length || 0) > 0 && (
           <div>
             <h4 className="text-sm font-medium mb-2">Active Alerts</h4>
             <div className="space-y-2">
-              {diagnostics.alerts.map((alert) => (
+              {(diagnostics.alerts || []).map((alert) => (
                 <div key={alert.id} className="flex items-start space-x-2 p-2 bg-background/50 rounded border">
                   {getSeverityIcon(alert.severity)}
                   <div className="flex-1">

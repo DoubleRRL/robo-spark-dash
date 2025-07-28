@@ -145,7 +145,7 @@ export function initializeVehicleRoutes(): VehicleRoute[] {
       startTime: Date.now(),
       estimatedDuration: 0,
       status: 'available',
-      battery: 85 + Math.random() * 15, // 85-100%
+      battery: Math.floor(85 + Math.random() * 15), // 85-100% (integer only)
       speed: 0
     };
   });
@@ -186,9 +186,9 @@ export function updateVehiclePosition(vehicle: VehicleRoute): VehicleRoute {
   
   // Update battery based on status
   if (vehicle.status === 'busy') {
-    vehicle.battery = Math.max(0, vehicle.battery - 0.1); // Drain battery while driving
+    vehicle.battery = Math.floor(Math.max(0, vehicle.battery - 0.1)); // Drain battery while driving
   } else if (vehicle.status === 'charging') {
-    vehicle.battery = Math.min(100, vehicle.battery + 0.5); // Charge battery
+    vehicle.battery = Math.floor(Math.min(100, vehicle.battery + 0.5)); // Charge battery
   }
   
   return vehicle;

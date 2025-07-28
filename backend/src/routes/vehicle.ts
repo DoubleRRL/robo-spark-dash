@@ -74,6 +74,32 @@ router.get('/', async (req, res) => {
 router.post('/', vehicleController.createVehicle);
 router.get('/:id', vehicleController.getVehicle);
 router.post('/:id/route', vehicleController.createRoute);
+router.get('/:id/route', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT waypoints, pickup_location, destination, status
+      FROM routes 
+      WHERE vehicle_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [req.params.id]);
+    
+    if (rows.length > 0) {
+      const route = rows[0];
+      res.json({
+        waypoints: route.waypoints,
+        pickupLocation: route.pickup_location,
+        destination: route.destination,
+        status: route.status
+      });
+    } else {
+      res.status(404).json({ error: 'No route found for vehicle' });
+    }
+  } catch (error) {
+    console.error('Error fetching vehicle route:', error);
+    res.status(500).json({ error: 'Failed to fetch vehicle route' });
+  }
+});
 router.get('/route/:id', vehicleController.getRoute);
 router.post('/:id/lock', vehicleController.lockVehicle);
 router.post('/:id/unlock', vehicleController.unlockVehicle);
