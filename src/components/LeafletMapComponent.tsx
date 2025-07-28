@@ -2,6 +2,30 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-routing-machine';
+import { isPointInCompton, constrainToCompton, COMPTON_BOUNDS } from '../utils/vehicleRouting';
+
+// Add missing type definitions for leaflet-routing-machine
+declare module 'leaflet' {
+  namespace Routing {
+    interface RoutingControlOptions {
+      waypoints: L.LatLng[];
+      router?: any;
+      routeWhileDragging?: boolean;
+      addWaypoints?: boolean;
+      createMarker?: (i: number, waypoint: any, n: number) => L.Marker | null;
+      lineOptions?: LineOptions;
+    }
+
+    interface LineOptions {
+      styles?: any[];
+      extendToWaypoints?: boolean;
+      missingRouteTolerance?: number;
+    }
+
+    function control(options: RoutingControlOptions): any;
+    function osrmv1(options: any): any;
+  }
+}
 
 interface Vehicle {
   id: string;
@@ -51,12 +75,12 @@ L.Icon.Default.mergeOptions({
 });
 
 // Compton boundary coordinates for route validation
-const COMPTON_BOUNDS = {
-  north: 33.91783,
-  south: 33.86303,
-  east: -118.18225,
-  west: -118.26315
-};
+// const COMPTON_BOUNDS = {
+//   north: 33.91783,
+//   south: 33.86303,
+//   east: -118.18225,
+//   west: -118.26315
+// };
 
 // Realistic destinations within Compton for mock routes
 const COMPTON_DESTINATIONS = [
@@ -79,8 +103,7 @@ const COMPTON_DESTINATIONS = [
 
 // Function to check if coordinates are within Compton bounds
 function isWithinComptonBounds(lat: number, lng: number): boolean {
-  return lat >= COMPTON_BOUNDS.south && lat <= COMPTON_BOUNDS.north &&
-         lng >= COMPTON_BOUNDS.west && lng <= COMPTON_BOUNDS.east;
+  return isPointInCompton(lat, lng);
 }
 
 // Function to get a random destination within Compton
@@ -237,6 +260,10 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
   const generateRealisticRoute = (startLat: number, startLng: number, endLat: number, endLng: number) => {
     console.log(`🔄 Generating realistic route from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
     
+    // Make sure start and end points are within Compton
+    const startPoint = constrainToCompton(startLat, startLng);
+    const endPoint = constrainToCompton(endLat, endLng);
+    
     const route = [];
     const numPoints = 12; // More points for smoother curve
     
@@ -246,21 +273,20 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
       
       // Create a curved path using sine wave for more realistic movement
       const curveIntensity = 0.003; // Controls how much the route curves
-      const lat = startLat + (endLat - startLat) * t + Math.sin(t * Math.PI) * curveIntensity * (Math.random() - 0.5);
-      const lng = startLng + (endLng - startLng) * t + Math.sin(t * Math.PI) * curveIntensity * (Math.random() - 0.5);
+      const lat = startPoint.lat + (endPoint.lat - startPoint.lat) * t + Math.sin(t * Math.PI) * curveIntensity * (Math.random() - 0.5);
+      const lng = startPoint.lng + (endPoint.lng - startPoint.lng) * t + Math.sin(t * Math.PI) * curveIntensity * (Math.random() - 0.5);
       
-      // Ensure point is within Compton bounds
-      const boundedLat = Math.max(COMPTON_BOUNDS.south, Math.min(COMPTON_BOUNDS.north, lat));
-      const boundedLng = Math.max(COMPTON_BOUNDS.west, Math.min(COMPTON_BOUNDS.east, lng));
+      // Ensure point is within Compton polygon
+      const constrainedPoint = constrainToCompton(lat, lng);
       
       route.push({ 
-        lat: boundedLat, 
-        lng: boundedLng, 
+        lat: constrainedPoint.lat, 
+        lng: constrainedPoint.lng, 
         timestamp: Date.now() + (i * 30000) // 30 seconds between points
       });
     }
     
-    console.log(`✅ Generated realistic route with ${route.length} points`);
+    console.log(`✅ Generated realistic route with ${route.length} points, all within Compton boundary`);
     return route;
   };
 
@@ -568,7 +594,9 @@ export default function LeafletMapComponent({ vehicles, selectedVehicle, onVehic
               addWaypoints: false,
               createMarker: () => null, // Don't create markers
               lineOptions: {
-                styles: [{ color: '#3b82f6', weight: 4, opacity: 0.7 }]
+                styles: [{ color: '#3b82f6', weight: 4, opacity: 0.7 }],
+                extendToWaypoints: true,
+                missingRouteTolerance: 0
               }
             }).on('routingerror', (e) => {
               console.log(`⚠️ OSRM routing failed, using fallback polyline:`, e);
