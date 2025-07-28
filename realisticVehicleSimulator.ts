@@ -1,6 +1,16 @@
-const { io } = require('socket.io-client');
-const { getRandomAddress } = require('./src/utils/comptonAddresses.ts');
-const { generateVehicleDiagnostics } = require('./src/utils/vehicleDiagnostics.ts');
+import io from 'socket.io-client';
+import fetch from 'node-fetch';
+import { 
+  isWithinComptonBounds, 
+  COMPTON_BOUNDS, 
+  VEHICLE_START_LOCATIONS,
+  CHARGING_STATIONS
+} from './src/utils/vehicleRouting';
+import { getRandomAddress } from './src/utils/comptonAddresses';
+
+// Import Google Maps API key
+import { apiKeys } from './src/config/api-keys';
+const GOOGLE_MAPS_API_KEY = apiKeys.googleMaps;
 
 // Compton boundary coordinates
 const COMPTON_BOUNDARY = {
@@ -29,22 +39,23 @@ const VEHICLE_START_LOCATIONS = [
   { lat: 33.8800, lng: -118.1950, name: "Compton Residential Area 3" }
 ];
 
-// Function to constrain coordinates within Compton boundary
+// Function to constrain position to Compton boundary
 function constrainToComptonBoundary(lat, lng) {
-  return {
-    lat: Math.max(COMPTON_BOUNDARY.minLat, Math.min(COMPTON_BOUNDARY.maxLat, lat)),
-    lng: Math.max(COMPTON_BOUNDARY.minLng, Math.min(COMPTON_BOUNDARY.maxLng, lng))
-  };
+  if (isWithinComptonBounds(lat, lng)) {
+    return { lat, lng };
+  }
+  
+  // If outside bounds, move to nearest point on boundary
+  const north = COMPTON_BOUNDS.north;
+  const south = COMPTON_BOUNDS.south;
+  const east = COMPTON_BOUNDS.east;
+  const west = COMPTON_BOUNDS.west;
+  
+  const constrainedLat = Math.max(south, Math.min(north, lat));
+  const constrainedLng = Math.max(west, Math.min(east, lng));
+  
+  return { lat: constrainedLat, lng: constrainedLng };
 }
-
-// Charging station locations
-const CHARGING_STATIONS = [
-  { lat: 33.8958, lng: -118.2201, name: "City Hall Charging Station" },
-  { lat: 33.8897, lng: -118.2189, name: "College Charging Station" },
-  { lat: 33.8850, lng: -118.2000, name: "Shopping Center Charging Station" },
-  { lat: 33.8800, lng: -118.2100, name: "Plaza Charging Station" },
-  { lat: 33.8750, lng: -118.2050, name: "Medical Center Charging Station" }
-];
 
 // Calculate fare based on distance (2.69 to 14.20 range)
 function calculateFare(distanceMiles) {
@@ -54,32 +65,44 @@ function calculateFare(distanceMiles) {
   return Math.min(fare, 14.20); // Cap at 14.20
 }
 
-// Get OSRM route between two points
-async function getOSRMRoute(startLat, startLng, endLat, endLng) {
+// Get Google Maps route between two points
+async function getGoogleMapsRoute(startLat, startLng, endLat, endLng) {
   try {
-    const response = await fetch(
-      `http://localhost:5000/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`
-    );
+    console.log(`🔄 Fetching Google Maps route from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
+    
+    // If API key is not available, use fallback
+    if (!GOOGLE_MAPS_API_KEY) {
+      console.log('No Google Maps API key, using fallback route');
+      return createStraightLineRoute(startLat, startLng, endLat, endLng);
+    }
+    
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${startLat},${startLng}&destination=${endLat},${endLng}&key=${GOOGLE_MAPS_API_KEY}`;
+    const response = await fetch(url);
     
     if (!response.ok) {
-      throw new Error('OSRM route request failed');
+      throw new Error(`Google Maps route request failed: ${response.status}`);
     }
     
     const data = await response.json();
     
-    if (data.routes && data.routes[0]) {
+    if (data.status === 'OK' && data.routes && data.routes[0]) {
       const route = data.routes[0];
-      const coordinates = route.geometry.coordinates;
-      const duration = route.duration; // seconds
+      const encodedPolyline = route.overview_polyline.points;
+      const duration = route.legs[0].duration.value; // seconds
       
-      // Convert coordinates to route points with timestamps
+      // Decode polyline
+      const coordinates = decodePolyline(encodedPolyline);
+      
+      console.log(`✅ Google Maps route found with ${coordinates.length} points, duration: ${duration}s`);
+      
+      // Convert coordinates to RoutePoint array with timestamps
       const routePoints = [];
       const timePerPoint = duration / (coordinates.length - 1);
       
       coordinates.forEach((coord, index) => {
         routePoints.push({
-          lng: coord[0],
-          lat: coord[1],
+          lat: coord[0],
+          lng: coord[1],
           timestamp: Date.now() + (index * timePerPoint * 1000)
         });
       });
@@ -87,32 +110,95 @@ async function getOSRMRoute(startLat, startLng, endLat, endLng) {
       return routePoints;
     }
     
-    throw new Error('No route found');
+    console.warn(`No route found in Google Maps response: ${data.status}`);
+    return createStraightLineRoute(startLat, startLng, endLat, endLng);
   } catch (error) {
-    console.error('OSRM routing error:', error);
-    // Fallback: create simple straight-line route
+    console.error('Google Maps routing error:', error);
+    console.log(`⚠️ Google Maps failed, using fallback route:`, error);
+    
+    // Fallback to straight line route with intermediate points
     return createStraightLineRoute(startLat, startLng, endLat, endLng);
   }
 }
 
-// Fallback: create straight-line route when OSRM is unavailable
+// Decode Google polyline format
+function decodePolyline(encoded) {
+  const poly = [];
+  let index = 0;
+  const len = encoded.length;
+  let lat = 0, lng = 0;
+
+  while (index < len) {
+    let shift = 0, result = 0;
+
+    do {
+      const b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (result >= 0x20);
+
+    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+
+    do {
+      const b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (result >= 0x20);
+
+    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+
+    poly.push([lat / 1E5, lng / 1E5]);
+  }
+
+  return poly;
+}
+
+// Fallback: create straight-line route with curve
 function createStraightLineRoute(startLat, startLng, endLat, endLng) {
-  const points = 20;
-  const routePoints = [];
-  const duration = 15 * 60 * 1000; // 15 minutes in milliseconds
+  console.log(`🔄 Creating fallback curved route from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
   
-  for (let i = 0; i <= points; i++) {
-    const progress = i / points;
-    const lat = startLat + (endLat - startLat) * progress;
-    const lng = startLng + (endLng - startLng) * progress;
+  const routePoints = [];
+  const numPoints = 15; // More points for smoother movement
+  const curveFactor = 0.002; // Controls how much the path curves
+  
+  // Make sure start and end points are within Compton
+  const startPoint = constrainToComptonBoundary(startLat, startLng);
+  const endPoint = constrainToComptonBoundary(endLat, endLng);
+  
+  // Create a control point for quadratic curve
+  const midLat = (startPoint.lat + endPoint.lat) / 2;
+  const midLng = (startPoint.lng + endPoint.lng) / 2;
+  // Add some randomness to control point
+  const controlLat = midLat + (Math.random() - 0.5) * curveFactor * 10;
+  const controlLng = midLng + (Math.random() - 0.5) * curveFactor * 10;
+  
+  for (let i = 0; i <= numPoints; i++) {
+    const t = i / numPoints;
+    
+    // Quadratic Bezier curve formula
+    const lat = (1 - t) * (1 - t) * startPoint.lat + 2 * (1 - t) * t * controlLat + t * t * endPoint.lat;
+    const lng = (1 - t) * (1 - t) * startPoint.lng + 2 * (1 - t) * t * controlLng + t * t * endPoint.lng;
+    
+    // Add small random jitter
+    const jitterLat = lat + (Math.random() - 0.5) * curveFactor;
+    const jitterLng = lng + (Math.random() - 0.5) * curveFactor;
+    
+    // Ensure point is within Compton boundary
+    const constrainedPoint = constrainToComptonBoundary(jitterLat, jitterLng);
     
     routePoints.push({
-      lat,
-      lng,
-      timestamp: Date.now() + (progress * duration)
+      lat: constrainedPoint.lat,
+      lng: constrainedPoint.lng,
+      timestamp: Date.now() + (i * 30000) // 30 seconds between points
     });
   }
   
+  console.log(`✅ Created fallback curved route with ${routePoints.length} points, all within Compton boundary`);
   return routePoints;
 }
 
@@ -181,35 +267,35 @@ function updateVehiclePosition(vehicle) {
   return vehicle;
 }
 
-// Assign new trip to vehicle
+// Update the assignTripToVehicle function to use Google Maps
 async function assignTripToVehicle(vehicle, pickup, destination) {
   // First route to pickup
-  const pickupRoute = await getOSRMRoute(
+  const pickupRoute = await getGoogleMapsRoute(
     vehicle.lat, vehicle.lng, pickup.lat, pickup.lng
   );
   
   // Then route from pickup to destination
-  const destinationRoute = await getOSRMRoute(
+  const destinationRoute = await getGoogleMapsRoute(
     pickup.lat, pickup.lng, destination.lat, destination.lng
   );
   
   // Combine routes
   const fullRoute = [...pickupRoute, ...destinationRoute];
   
-      return {
-      ...vehicle,
-      pickup,
-      destination,
-      route: fullRoute,
-      currentIndex: 0,
-      startTime: Date.now(),
-      estimatedDuration: (fullRoute[fullRoute.length - 1]?.timestamp || 0) - Date.now(),
-      status: 'picking-up', // Start with picking-up status
-      speed: 25 // Default speed
-    };
+  return {
+    ...vehicle,
+    pickup,
+    destination,
+    route: fullRoute,
+    currentIndex: 0,
+    startTime: Date.now(),
+    estimatedDuration: (fullRoute[fullRoute.length - 1]?.timestamp || 0) - Date.now(),
+    status: 'picking-up', // Start with picking-up status
+    speed: 25 // Default speed
+  };
 }
 
-// Send vehicle to charging station
+// Update the sendVehicleToCharging function to use Google Maps
 async function sendVehicleToCharging(vehicle) {
   // Find nearest charging station
   const nearestCharging = CHARGING_STATIONS.reduce((nearest, station) => {
@@ -226,7 +312,7 @@ async function sendVehicleToCharging(vehicle) {
     return vehicle;
   }
   
-  const chargingRoute = await getOSRMRoute(
+  const chargingRoute = await getGoogleMapsRoute(
     vehicle.lat, vehicle.lng, 
     nearestCharging.station.lat, nearestCharging.station.lng
   );
@@ -473,8 +559,8 @@ class RealisticVehicleSimulator {
 
   sendUpdates() {
     this.vehicles.forEach(vehicle => {
-      // Generate diagnostic data
-      const diagnostics = generateVehicleDiagnostics(vehicle.id, vehicle);
+      // Generate realistic diagnostic data
+      const diagnostics = this.generateDiagnostics(vehicle);
       
       const update = {
         id: vehicle.id,
@@ -488,9 +574,7 @@ class RealisticVehicleSimulator {
         speed: Math.round(vehicle.speed),
         eta: this.calculateETA(vehicle),
         heading: this.calculateHeading(vehicle),
-        route: vehicle.route, // Include the actual route data
-        currentIndex: vehicle.currentIndex, // Include current position in route
-        diagnostics: diagnostics // Include diagnostic data
+        diagnostics: diagnostics
       };
       
       this.socket.emit('vehicle-update', update);

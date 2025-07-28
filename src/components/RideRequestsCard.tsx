@@ -1,6 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, MapPin, User, AlertCircle } from "lucide-react";
+import { Clock, MapPin, User, AlertCircle, Car, Search } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { generateActiveTrips } from "../utils/riderData";
 
 interface RideRequest {
   id: string;
@@ -21,20 +24,40 @@ interface RideRequest {
     lng: number;
     type: string;
   };
-  status: "ride requested";
+  status: "ride requested" | "en-route" | "dropping off";
   mileage: number;
   duration: string;
   fare: number;
-  requestTime: string;
+  requestTime?: string;
 }
 
 interface RideRequestsCardProps {
-  requests: RideRequest[];
+  requests?: RideRequest[];
   onAssignVehicle?: (requestId: string, vehicleId: string) => void;
   availableVehicles: Array<{ id: string; type: string; battery: number; lat: number; lng: number }>;
 }
 
-export default function RideRequestsCard({ requests, onAssignVehicle, availableVehicles }: RideRequestsCardProps) {
+export default function RideRequestsCard({ requests: externalRequests, onAssignVehicle, availableVehicles }: RideRequestsCardProps) {
+  // Generate 18-25 riders if no external requests are provided
+  const [generatedRequests] = useState<RideRequest[]>(
+    () => externalRequests || generateActiveTrips(Math.floor(Math.random() * 8) + 18) // 18-25 riders
+  );
+
+  // Use either the external requests or our generated ones
+  const requests = externalRequests || generatedRequests;
+  
+  // Filter requests by status for display
+  const pendingRequests = requests.filter(r => r.status === "ride requested");
+  const enRouteRequests = requests.filter(r => r.status === "en-route");
+  const droppingOffRequests = requests.filter(r => r.status === "dropping off");
+  
+  // Filter type
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  
+  const filteredRequests = statusFilter === "all" 
+    ? requests 
+    : requests.filter(r => r.status === statusFilter);
+    
   const getNearestVehicle = (requestLat: number, requestLng: number) => {
     if (availableVehicles.length === 0) return null;
     
@@ -57,21 +80,62 @@ export default function RideRequestsCard({ requests, onAssignVehicle, availableV
   return (
     <Card className="bg-gradient-card border-border">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-foreground flex items-center">
-          <AlertCircle className="mr-2 h-5 w-5 text-orange-500" />
-          Ride Requests ({requests.length})
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg font-semibold text-foreground flex items-center">
+            <AlertCircle className="mr-2 h-5 w-5 text-orange-500" />
+            Ride Requests ({requests.length})
+          </CardTitle>
+          <div className="flex space-x-1">
+            <Button 
+              variant={statusFilter === "all" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setStatusFilter("all")}
+              className="text-xs px-2 h-7"
+            >
+              All ({requests.length})
+            </Button>
+            <Button 
+              variant={statusFilter === "ride requested" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setStatusFilter("ride requested")}
+              className="text-xs px-2 h-7"
+            >
+              <Search className="h-3 w-3 mr-1" />
+              Pending ({pendingRequests.length})
+            </Button>
+            <Button 
+              variant={statusFilter === "en-route" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setStatusFilter("en-route")}
+              className="text-xs px-2 h-7"
+            >
+              <Car className="h-3 w-3 mr-1" />
+              En Route ({enRouteRequests.length})
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4 max-h-96 overflow-y-auto">
-          {requests.length === 0 ? (
+          {filteredRequests.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No pending ride requests
+              No {statusFilter === "all" ? "" : statusFilter} ride requests
             </div>
           ) : (
-            requests.map((request) => {
+            filteredRequests.map((request) => {
               const nearest = getNearestVehicle(request.pickupLocation.lat, request.pickupLocation.lng);
               const distanceMiles = nearest ? (nearest.distance * 69).toFixed(1) : 'N/A';
+              
+              let badgeClass = "bg-orange-500"; // Default for pending
+              let badgeText = "Pending";
+              
+              if (request.status === "en-route") {
+                badgeClass = "bg-blue-500";
+                badgeText = "En Route";
+              } else if (request.status === "dropping off") {
+                badgeClass = "bg-green-500";
+                badgeText = "Dropping Off";
+              }
               
               return (
                 <div
@@ -85,8 +149,8 @@ export default function RideRequestsCard({ requests, onAssignVehicle, availableV
                         {request.passenger}
                       </span>
                     </div>
-                    <Badge className="bg-orange-500 text-white border-none">
-                      Pending
+                    <Badge className={`${badgeClass} text-white border-none`}>
+                      {badgeText}
                     </Badge>
                   </div>
                   
@@ -99,36 +163,31 @@ export default function RideRequestsCard({ requests, onAssignVehicle, availableV
                       <MapPin className="mr-2 h-3 w-3 text-foreground" />
                       <span className="truncate">{request.destination}</span>
                     </div>
-                    
-                    {nearest && (
-                      <div className="bg-tesla-blue/10 p-2 rounded border border-tesla-blue/20">
-                        <div className="text-xs text-foreground">
-                          <strong>Nearest Vehicle:</strong> {nearest.vehicle.id} ({distanceMiles} mi away)
-                        </div>
-                        <div className="text-xs text-foreground">
-                          Battery: {nearest.vehicle.battery}% • Type: {nearest.vehicle.type}
-                        </div>
-                        {onAssignVehicle && (
-                          <button
-                            onClick={() => onAssignVehicle(request.id, nearest.vehicle.id)}
-                            className="mt-1 text-xs bg-tesla-blue text-white px-2 py-1 rounded hover:bg-tesla-blue/80 transition-colors"
-                          >
-                            Assign Vehicle
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center justify-between pt-2">
-                      <div className="flex items-center text-foreground">
-                        <Clock className="mr-1 h-3 w-3" />
-                        {request.requestTime}
-                      </div>
-                      <div className="flex items-center text-tesla-green font-medium">
-                        ${request.fare.toFixed(2)}
-                      </div>
+                    <div className="flex items-center text-muted-foreground">
+                      <Clock className="mr-2 h-3 w-3" />
+                      <span>{request.duration} • {request.mileage.toFixed(1)} mi • ${request.fare.toFixed(2)}</span>
                     </div>
                   </div>
+                  
+                  {request.status === "ride requested" && nearest && onAssignVehicle && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <div className="flex justify-between items-center text-xs text-muted-foreground">
+                        <div>
+                          Nearest: {nearest.vehicle.id} ({distanceMiles} mi)
+                          <br />
+                          Battery: {Math.round(nearest.vehicle.battery)}% • Type: {nearest.vehicle.type}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="tesla"
+                          className="text-xs"
+                          onClick={() => onAssignVehicle(request.id, nearest.vehicle.id)}
+                        >
+                          Assign
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })

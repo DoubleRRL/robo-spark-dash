@@ -56,8 +56,10 @@ io.of('/vehicles').on('connection', socket => {
         data.lat,
         data.lng,
         data.progress || 0,
-        data.battery || 100,
-        data.speed || 0,
+        // Make sure battery is an integer
+        Math.round(data.battery) || 100,
+        // Make sure speed is an integer
+        Math.round(data.speed) || 0,
         data.eta || '0 min',
         data.heading || 0
       ]);

@@ -159,7 +159,7 @@ export function calculateFare(distanceMiles: number): number {
   return Math.min(fare, 14.20); // Cap at 14.20
 }
 
-// Get OSRM route between two points
+// Get Google Maps route between two points
 export async function getOSRMRoute(
   startLat: number, 
   startLng: number, 
@@ -167,34 +167,37 @@ export async function getOSRMRoute(
   endLng: number
 ): Promise<RoutePoint[]> {
   try {
-    console.log(`🔄 Fetching OSRM route from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
+    console.log(`🔄 Fetching Google Maps route from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
     
     const response = await fetch(
-      `http://localhost:5000/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`
+      `https://maps.googleapis.com/maps/api/directions/json?origin=${startLat},${startLng}&destination=${endLat},${endLng}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
     );
     
     if (!response.ok) {
-      throw new Error(`OSRM route request failed: ${response.status}`);
+      throw new Error(`Google Maps route request failed: ${response.status}`);
     }
     
     const data = await response.json();
-    console.log(`📊 OSRM response:`, data);
+    console.log(`📊 Google Maps response:`, data);
     
     if (data.routes && data.routes[0]) {
       const route = data.routes[0];
-      const coordinates = route.geometry.coordinates;
-      const duration = route.duration; // seconds
+      const encodedPolyline = route.overview_polyline.points;
+      const duration = route.legs[0].duration.value; // seconds
       
-      console.log(`✅ OSRM route found with ${coordinates.length} points, duration: ${duration}s`);
+      // Decode polyline
+      const coordinates = decodePolyline(encodedPolyline);
+      
+      console.log(`✅ Google Maps route found with ${coordinates.length} points, duration: ${duration}s`);
       
       // Convert coordinates to RoutePoint array with timestamps
       const routePoints: RoutePoint[] = [];
       const timePerPoint = duration / (coordinates.length - 1);
       
-      coordinates.forEach((coord: number[], index: number) => {
+      coordinates.forEach((coord: [number, number], index: number) => {
         routePoints.push({
-          lng: coord[0],
-          lat: coord[1],
+          lat: coord[0],
+          lng: coord[1],
           timestamp: Date.now() + (index * timePerPoint * 1000)
         });
       });
@@ -202,14 +205,51 @@ export async function getOSRMRoute(
       return routePoints;
     }
     
-    throw new Error('No route found in OSRM response');
+    throw new Error('No route found in Google Maps response');
   } catch (error) {
-    console.error('OSRM routing error:', error);
+    console.error('Google Maps routing error:', error);
     console.log(`🔄 Falling back to straight line route`);
     
     // Fallback to straight line route with intermediate points
     return createStraightLineRoute(startLat, startLng, endLat, endLng);
   }
+}
+
+// Decode Google polyline format
+function decodePolyline(encoded: string): [number, number][] {
+  const poly: [number, number][] = [];
+  let index = 0;
+  const len = encoded.length;
+  let lat = 0, lng = 0;
+
+  while (index < len) {
+    let shift = 0, result = 0;
+
+    do {
+      const b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (result >= 0x20);
+
+    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+
+    do {
+      const b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (result >= 0x20);
+
+    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+
+    poly.push([lat / 1E5, lng / 1E5]);
+  }
+
+  return poly;
 }
 
 // Fallback: create straight-line route when OSRM is unavailable

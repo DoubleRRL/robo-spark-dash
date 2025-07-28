@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { spawn } from 'child_process';
 import axios from 'axios';
 import * as vehicleController from '../controllers/vehicleController';
-import { snapToRoad } from '../utils/osrm';
+import { snapToRoad } from '../utils/googleMaps';
 import { pool } from '../utils/dbInit';
 
 const router = Router();
@@ -115,8 +115,8 @@ router.post('/snap-route', async (req, res) => {
     const snapped = await snapToRoad(waypoints);
     res.json({ snapped });
   } catch (e: any) {
-    console.error('OSRM snap error:', e);
-    res.status(500).json({ error: 'osrm error', details: e.message });
+    console.error('Google Maps snap error:', e);
+    res.status(500).json({ error: 'Google Maps error', details: e.message });
   }
 });
 

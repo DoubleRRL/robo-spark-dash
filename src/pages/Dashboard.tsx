@@ -1,33 +1,17 @@
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import VehicleStatusCard from "@/components/VehicleStatusCard";
-import ActiveTripsCard from "@/components/ActiveTripsCard";
-import RideRequestsCard from "@/components/RideRequestsCard";
-import LeafletMapComponent from "@/components/LeafletMapComponent";
-import { useSocket } from "@/hooks/useSocket";
-import { generateActiveTrips } from "@/utils/riderData";
-import { comptonAddresses } from "@/utils/comptonAddresses";
-import VehicleDiagnosticsCard from "@/components/VehicleDiagnosticsCard";
-import {
-  Car,
-  DollarSign,
-  Users,
-  Clock,
-  Settings,
-  Bell,
-  RefreshCw,
-  AlertTriangle,
-  MapPin,
-  Phone,
-  Shield,
-  Activity,
-  Wifi,
-  WifiOff,
-  Filter,
-} from "lucide-react";
+import { useState, useEffect } from 'react';
+import { Wifi, WifiOff, Bell, Settings } from 'lucide-react';
+import { useSocket } from '../hooks/useSocket';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import VehicleStatusCard from '../components/VehicleStatusCard';
+import ActiveTripsCard from '../components/ActiveTripsCard';
+import RideRequestsCard from '../components/RideRequestsCard';
+import GoogleMapComponent from '../components/GoogleMapComponent';
+import { firstNames, lastNames, generateActiveTrips } from '../utils/riderData';
+import { comptonAddresses } from '../utils/comptonAddresses';
+import VehicleDiagnosticsCard from '../components/VehicleDiagnosticsCard';
 
 // Generate random active trips
 const allTrips = generateActiveTrips(8);
@@ -51,6 +35,26 @@ export default function Dashboard() {
   console.log('Vehicle IDs:', vehicles.map(v => v.id));
   console.log('🔍 Raw vehicle data:', vehicles.slice(0, 3)); // Log first 3 vehicles for debugging
   const [avgWaitTime] = useState((Math.random() * 5 + 2).toFixed(1)); // Static on launch
+
+  // Generate ride data with proper en-route/busy vehicle counts
+  const [rideData] = useState(() => {
+    // Generate 18-25 total requests
+    const totalRequests = Math.floor(Math.random() * 8) + 18; // 18-25
+    
+    // Determine how many of each type: 20-30% en-route, 10-15% dropping off, rest pending
+    const enRouteCount = Math.floor(totalRequests * (0.2 + Math.random() * 0.1)); // 20-30%
+    const droppingOffCount = Math.floor(totalRequests * (0.1 + Math.random() * 0.05)); // 10-15%
+    const pendingCount = totalRequests - enRouteCount - droppingOffCount;
+    
+    console.log(`Generated ride counts: ${enRouteCount} en-route, ${droppingOffCount} dropping off, ${pendingCount} pending`);
+    
+    return {
+      enRouteCount,
+      droppingOffCount,
+      pendingCount,
+      totalCount: totalRequests
+    };
+  });
 
   // Vehicle type mapping function - FIX: use type field from socket data
   const getVehicleDisplayName = (vehicle: any) => {
@@ -105,7 +109,8 @@ export default function Dashboard() {
     return {
       vehicleId: vehicle.id,
       status,
-      battery: vehicle.battery,
+      // Ensure battery is a whole number
+      battery: Math.round(vehicle.battery || 0),
       location: `${vehicle.lat.toFixed(4)}, ${vehicle.lng.toFixed(4)}`,
       lastTrip: vehicle.eta || "Unknown",
       type: getVehicleDisplayName(vehicle),
@@ -138,7 +143,7 @@ export default function Dashboard() {
             Tesla Robotaxi Control Center
           </h1>
           <Badge variant="secondary" className="bg-tesla-green/20 text-tesla-green">
-            {activeVehicles} Active
+            {rideData.enRouteCount + rideData.droppingOffCount} Active
           </Badge>
         </div>
         <div className="flex items-center space-x-2">
@@ -172,192 +177,170 @@ export default function Dashboard() {
           <div className="p-4 border-b border-border">
             <h3 className="text-sm font-medium text-foreground mb-3">Fleet Analytics</h3>
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-background/50 rounded-lg p-3">
-                <div className="text-xs text-muted-foreground">Avg Wait Time</div>
-                <div className="text-lg font-semibold text-tesla-green">{avgWaitTime} min</div>
+              <div className="bg-background/50 rounded-lg p-3 border border-border">
+                <h4 className="text-xs font-medium text-muted-foreground">Total Vehicles</h4>
+                <div className="text-2xl font-bold text-foreground">{vehicles.length}</div>
               </div>
-              <div className="bg-background/50 rounded-lg p-3">
-                <div className="text-xs text-muted-foreground">Active Trips</div>
-                <div className="text-lg font-semibold text-foreground">{activeTrips.length}</div>
+              <div className="bg-background/50 rounded-lg p-3 border border-border">
+                <h4 className="text-xs font-medium text-muted-foreground">Active Trips</h4>
+                <div className="text-2xl font-bold text-foreground">{rideData.enRouteCount + rideData.droppingOffCount}</div>
+              </div>
+              <div className="bg-background/50 rounded-lg p-3 border border-border">
+                <h4 className="text-xs font-medium text-muted-foreground">Avg Wait Time</h4>
+                <div className="text-2xl font-bold text-foreground">{avgWaitTime} <span className="text-sm font-normal">min</span></div>
+              </div>
+              <div className="bg-background/50 rounded-lg p-3 border border-border">
+                <h4 className="text-xs font-medium text-muted-foreground">Daily Revenue</h4>
+                <div className="text-2xl font-bold text-tesla-green">${(totalRevenue).toFixed(2)}</div>
               </div>
             </div>
           </div>
 
-          {/* Vehicle List */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-foreground">Fleet Vehicles ({filteredVehicles.length})</h3>
-                <Filter className="h-4 w-4 text-muted-foreground" />
-              </div>
-              
-              {/* Filter Controls */}
-              <div className="space-y-2 mb-3">
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Filter by status" />
+          {/* Vehicle filters */}
+          <div className="p-4">
+            <h3 className="text-sm font-medium text-foreground mb-3">Filters</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  Status
+                </label>
+                <Select
+                  value={statusFilter}
+                  onValueChange={setStatusFilter}
+                >
+                  <SelectTrigger className="w-full bg-background/50 border-border">
+                    <SelectValue placeholder="All Statuses" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="available">Available</SelectItem>
                     <SelectItem value="en-route">En Route</SelectItem>
                     <SelectItem value="pickup">Pickup</SelectItem>
                     <SelectItem value="dropoff">Dropoff</SelectItem>
-                    <SelectItem value="available">Available</SelectItem>
                     <SelectItem value="charging">Charging</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Filter by type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="Model X">Model X</SelectItem>
-                    <SelectItem value="Model Y">Model Y</SelectItem>
-                    <SelectItem value="Cybertruck">Cybertruck</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                <Select value={batteryFilter} onValueChange={setBatteryFilter}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Filter by battery" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Battery Levels</SelectItem>
-                    <SelectItem value="low">Low (&lt;30%)</SelectItem>
-                    <SelectItem value="medium">Medium (30-70%)</SelectItem>
-                    <SelectItem value="high">High (&gt;70%)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {filteredVehicles.map((vehicle) => (
-                  <div
-                    key={vehicle.vehicleId}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                      selectedVehicle === vehicle.vehicleId
-                        ? 'border-tesla-blue bg-tesla-blue/10'
-                        : 'border-border hover:border-tesla-blue/50'
-                    }`}
-                    onClick={() => {
-                      setSelectedVehicle(vehicle.vehicleId);
-                      // Center map on selected vehicle
-                      const selectedVehicleData = vehicles.find(v => v.id === vehicle.vehicleId);
-                      if (selectedVehicleData) {
-                        // This will trigger the map to center on the vehicle
-                        console.log('Selected vehicle:', selectedVehicleData);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <img 
-                          src={`/${vehicle.type === 'Cybertruck' ? 'cybertruck.png' : 
-                               vehicle.type === 'Model Y' ? 'model y.png' : 
-                               vehicle.type === 'Model X' ? 'model x.png' : 'cybertruck.png'}`}
-                          alt={vehicle.type}
-                          className="h-6 w-6 object-contain"
-                        />
-                        <div>
-                          <span className="text-sm font-medium text-foreground">{vehicle.vehicleId}</span>
-                          <div className="text-xs text-muted-foreground">{vehicle.type}</div>
-                        </div>
-                      </div>
-                      <Badge 
-                        className={`text-xs ${
-                          vehicle.status === 'en-route' ? 'bg-tesla-green' :
-                          vehicle.status === 'pickup' ? 'bg-yellow-500' :
-                          vehicle.status === 'dropoff' ? 'bg-orange-500' :
-                          vehicle.status === 'charging' ? 'bg-tesla-blue' :
-                          'bg-muted'
-                        } text-primary-foreground border-none`}
-                      >
-                        {vehicle.status}
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground mb-1">
-                      <strong>Status:</strong> {vehicle.status.toUpperCase()}
-                    </div>
-                    <div className="text-xs text-muted-foreground mb-1">
-                      <strong>Location:</strong> {vehicle.location}
-                    </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-xs text-muted-foreground">Battery: {vehicle.battery}%</span>
-                      <span className="text-xs text-muted-foreground">ETA: {vehicle.lastTrip}</span>
-                    </div>
-                  </div>
-                ))}
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  Vehicle Type
+                </label>
+                <Select
+                  value={typeFilter}
+                  onValueChange={setTypeFilter}
+                >
+                  <SelectTrigger className="w-full bg-background/50 border-border">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="cybertruck">Cybertruck</SelectItem>
+                    <SelectItem value="modely">Model Y</SelectItem>
+                    <SelectItem value="modelx">Model X</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  Battery Level
+                </label>
+                <Select
+                  value={batteryFilter}
+                  onValueChange={setBatteryFilter}
+                >
+                  <SelectTrigger className="w-full bg-background/50 border-border">
+                    <SelectValue placeholder="All Levels" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Levels</SelectItem>
+                    <SelectItem value="low">Low (&lt; 30%)</SelectItem>
+                    <SelectItem value="medium">Medium (30% - 70%)</SelectItem>
+                    <SelectItem value="high">High (&gt; 70%)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
-
-          {/* Vehicle Diagnostics - moved from right sidebar */}
+          
+          {/* Vehicle List */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <h3 className="text-sm font-medium text-foreground mb-3">Fleet Status</h3>
+            <div className="space-y-3">
+              {filteredVehicles.map((vehicle) => (
+                <VehicleStatusCard
+                  key={vehicle.vehicleId}
+                  vehicleId={vehicle.vehicleId}
+                  status={vehicle.status === "en-route" || vehicle.status === "pickup" || vehicle.status === "dropoff" ? "active" : 
+                          vehicle.status === "charging" ? "charging" : "idle"}
+                  battery={vehicle.battery}
+                  location={vehicle.location}
+                  lastTrip={vehicle.lastTrip}
+                  revenue={0}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        {/* Main Content - Map and Stats */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Map */}
+          <div className="flex-1 relative">
+            <GoogleMapComponent
+              vehicles={vehicles}
+              selectedVehicle={selectedVehicle}
+              onVehicleSelect={setSelectedVehicle}
+            />
+          </div>
+        </div>
+        
+        {/* Right Sidebar - Trips and Requests */}
+        <div className="w-96 bg-gradient-card border-l border-border flex flex-col">
+          {/* Vehicle Details (when selected) */}
           {selectedVehicle && (
-            <div className="p-4 border-t border-border">
-              <VehicleDiagnosticsCard 
-                diagnostics={vehicles.find(v => v.id === selectedVehicle)?.diagnostics || null}
+            <div className="p-4 border-b border-border">
+              <h3 className="text-sm font-medium text-foreground mb-3">Vehicle Diagnostics</h3>
+              <VehicleDiagnosticsCard
+                diagnostics={vehicles.find(v => v.id === selectedVehicle)?.diagnostics || {}}
                 vehicleType={vehicles.find(v => v.id === selectedVehicle)?.type || 'default'}
                 battery={vehicles.find(v => v.id === selectedVehicle)?.battery || 0}
               />
             </div>
           )}
-        </div>
-
-        {/* Center Map Area */}
-        <div className="flex-1 bg-tesla-gray relative">
-          <LeafletMapComponent 
-            vehicles={vehicles} 
-            selectedVehicle={selectedVehicle} 
-            onVehicleSelect={setSelectedVehicle}
-            rideRequests={rideRequests}
-          />
-        </div>
-
-        {/* Right Sidebar - Operations */}
-        <div className="w-80 bg-gradient-card border-l border-border flex flex-col">
-          {/* Emergency Procedures */}
-          {selectedVehicle && (
-            <div className="p-4 border-b border-border">
-              <div className="flex items-center space-x-2 mb-3">
-                <AlertTriangle className="h-4 w-4 text-tesla-red" />
-                <h3 className="text-sm font-medium text-foreground">Emergency Controls</h3>
-              </div>
-              <div className="space-y-2">
-                <Button variant="destructive" size="sm" className="w-full justify-start">
-                  <Shield className="h-3 w-3 mr-2" />
-                  Pull Over
-                </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start">
-                  <Phone className="h-3 w-3 mr-2" />
-                  Contact Vehicle
-                </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start">
-                  <Activity className="h-3 w-3 mr-2" />
-                  Remote Diagnostics
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Ride Requests */}
-          <div className="flex-1 overflow-y-auto">
-            <RideRequestsCard 
-              requests={rideRequests} 
-              availableVehicles={vehicles.filter(v => v.status === 'available').map(v => ({
-                id: v.id,
-                type: v.type,
-                battery: v.battery,
-                lat: v.lat,
-                lng: v.lng
+          
+          {/* Active Trips */}
+          <div className="p-4 border-b border-border">
+            <ActiveTripsCard
+              trips={Array.from({ length: rideData.enRouteCount + rideData.droppingOffCount }, (_, i) => ({
+                id: `trip-${i + 1}`,
+                passenger: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
+                pickup: comptonAddresses[Math.floor(Math.random() * comptonAddresses.length)].address,
+                destination: comptonAddresses[Math.floor(Math.random() * comptonAddresses.length)].address,
+                duration: `${Math.floor(Math.random() * 20) + 5} min`,
+                fare: Math.floor(Math.random() * 30) + 10,
+                status: i < rideData.enRouteCount ? "en-route" : "dropping off",
+                mileage: Math.floor(Math.random() * 10) + 1
               }))}
             />
           </div>
           
-          {/* Active Trips */}
-          <div className="flex-1 overflow-y-auto">
-            <ActiveTripsCard trips={activeTrips} />
+          {/* Ride Requests */}
+          <div className="flex-1 p-4 overflow-y-auto">
+            <RideRequestsCard 
+              availableVehicles={vehicles.filter(v => v.status === 'available').map(v => ({
+                id: v.id,
+                type: v.type || 'default',
+                battery: v.battery,
+                lat: v.lat,
+                lng: v.lng
+              }))}
+              onAssignVehicle={(requestId, vehicleId) => {
+                console.log(`Assigning request ${requestId} to vehicle ${vehicleId}`);
+                alert(`Assigned vehicle ${vehicleId} to trip ${requestId}`);
+              }}
+            />
           </div>
         </div>
       </div>
