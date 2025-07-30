@@ -155,7 +155,7 @@ export interface VehicleRoute {
 // Calculate fare based on distance (2.69 to 14.00 range)
 export function calculateFare(distanceMiles: number): number {
   const baseFare = 2.69;
-  const perMileRate = 1.50;
+  const perMileRate = 0.20; // $0.20 per mile
   const fare = baseFare + (distanceMiles * perMileRate);
   return Math.min(fare, 14.00); // Cap at 14.00
 }

@@ -4,7 +4,7 @@ import { Car, Battery, MapPin, Clock } from "lucide-react";
 
 interface VehicleStatusCardProps {
   vehicleId: string;
-  status: "idle" | "charging" | "maintenance";
+  status: "idle" | "charging" | "maintenance" | "pickup" | "dropoff" | "en-route" | "available";
   battery: number;
   location: string;
   lastTrip: string;
@@ -15,6 +15,10 @@ const statusConfig = {
   idle: { color: "bg-muted", label: "Idle", icon: Clock },
   charging: { color: "bg-tesla-blue", label: "Charging", icon: Battery },
   maintenance: { color: "bg-tesla-red", label: "Maintenance", icon: Car },
+  pickup: { color: "bg-orange-500", label: "Pickup", icon: Car },
+  dropoff: { color: "bg-purple-500", label: "Dropoff", icon: Car },
+  "en-route": { color: "bg-blue-500", label: "En Route", icon: Car },
+  available: { color: "bg-green-500", label: "Available", icon: Car },
 };
 
 export default function VehicleStatusCard({
@@ -25,7 +29,7 @@ export default function VehicleStatusCard({
   lastTrip,
   revenue,
 }: VehicleStatusCardProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] || statusConfig.available; // fallback to available
   const StatusIcon = config.icon;
 
   return (
