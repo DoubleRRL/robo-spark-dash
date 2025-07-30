@@ -1,4 +1,5 @@
 import { comptonAddresses } from './comptonAddresses';
+import { apiKeys } from '../config/api-keys';
 
 // Compton boundary polygon coordinates (accurate)
 export const COMPTON_POLYGON = [
@@ -170,7 +171,7 @@ export async function getOSRMRoute(
     console.log(`🔄 Fetching Google Maps route from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
     
     const response = await fetch(
-      `https://maps.googleapis.com/maps/api/directions/json?origin=${startLat},${startLng}&destination=${endLat},${endLng}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
+      `https://maps.googleapis.com/maps/api/directions/json?origin=${startLat},${startLng}&destination=${endLat},${endLng}&mode=driving&avoid=highways|tolls|ferries&units=imperial&alternatives=true&key=${apiKeys.googleMaps}`
     );
     
     if (!response.ok) {
@@ -182,19 +183,50 @@ export async function getOSRMRoute(
     
     if (data.routes && data.routes[0]) {
       const route = data.routes[0];
-      const encodedPolyline = route.overview_polyline.points;
       const duration = route.legs[0].duration.value; // seconds
       
-      // Decode polyline
-      const coordinates = decodePolyline(encodedPolyline);
+      // Use detailed route steps instead of overview polyline
+      const coordinates: [number, number][] = [];
       
-      console.log(`✅ Google Maps route found with ${coordinates.length} points, duration: ${duration}s`);
+      // Extract coordinates from each step in the route
+      route.legs[0].steps.forEach((step: { polyline?: { points: string } }) => {
+        if (step.polyline && step.polyline.points) {
+          const stepCoords = decodePolyline(step.polyline.points);
+          coordinates.push(...stepCoords);
+        }
+      });
+      
+      // Remove duplicates and ensure we have start and end points
+      const uniqueCoords = coordinates.filter((coord, index, arr) => {
+        if (index === 0) return true;
+        const prev = arr[index - 1];
+        const distance = Math.sqrt(
+          Math.pow(coord[0] - prev[0], 2) + Math.pow(coord[1] - prev[1], 2)
+        );
+        return distance > 0.00005; // Keep more points for smoother street following
+      });
+      
+      console.log(`✅ Google Maps route found with ${uniqueCoords.length} detailed points, duration: ${duration}s`);
+      
+      // Snap coordinates to actual roads for better street following
+      let finalCoords = uniqueCoords;
+      try {
+        const snappedCoords = await snapToRoads(uniqueCoords);
+        if (snappedCoords.length > 0) {
+          finalCoords = snappedCoords;
+          console.log(`🛣️ Snapped route to roads: ${snappedCoords.length} points`);
+        } else {
+          console.log(`⚠️ Road snapping failed, using original route`);
+        }
+      } catch (error) {
+        console.log(`⚠️ Road snapping error, using original route:`, error);
+      }
       
       // Convert coordinates to RoutePoint array with timestamps
       const routePoints: RoutePoint[] = [];
-      const timePerPoint = duration / (coordinates.length - 1);
+      const timePerPoint = duration / (finalCoords.length - 1);
       
-      coordinates.forEach((coord: [number, number], index: number) => {
+      finalCoords.forEach((coord: [number, number], index: number) => {
         routePoints.push({
           lat: coord[0],
           lng: coord[1],
@@ -419,4 +451,138 @@ export async function sendVehicleToCharging(vehicle: VehicleRoute): Promise<Vehi
     status: 'en-route-to-charging',
     speed: 20
   };
+}
+
+// NEW FUNCTION: Change destination while vehicle is en-route
+export async function changeVehicleDestination(
+  vehicle: VehicleRoute,
+  newDestination: { lat: number; lng: number; name: string }
+): Promise<VehicleRoute> {
+  // Validate new destination is within Compton
+  if (!isPointInCompton(newDestination.lat, newDestination.lng)) {
+    const constrained = constrainToCompton(newDestination.lat, newDestination.lng);
+    newDestination = {
+      ...newDestination,
+      lat: constrained.lat,
+      lng: constrained.lng
+    };
+  }
+
+  try {
+    // Get new route from current position to new destination
+    const newRoute = await getOSRMRoute(
+      vehicle.lat, vehicle.lng, 
+      newDestination.lat, newDestination.lng
+    );
+
+    console.log(`🔄 Vehicle ${vehicle.id} rerouted to ${newDestination.name}`);
+    console.log(`📍 New route has ${newRoute.length} points`);
+
+    return {
+      ...vehicle,
+      destination: newDestination,
+      route: newRoute,
+      currentIndex: 0, // Reset to start of new route
+      startTime: Date.now(),
+      estimatedDuration: (newRoute[newRoute.length - 1]?.timestamp || 0) - Date.now(),
+      status: vehicle.status === 'en-route-to-charging' ? 'en-route-to-charging' : 'busy',
+      speed: vehicle.status === 'en-route-to-charging' ? 20 : 25
+    };
+  } catch (error) {
+    console.error(`❌ Failed to reroute vehicle ${vehicle.id}:`, error);
+    throw new Error(`Failed to reroute vehicle: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// NEW FUNCTION: Get current vehicle position for routing
+export function getCurrentVehiclePosition(vehicle: VehicleRoute): { lat: number; lng: number } {
+  if (vehicle.route.length === 0) {
+    return { lat: vehicle.lat, lng: vehicle.lng };
+  }
+
+  const currentPoint = vehicle.route[vehicle.currentIndex];
+  const nextPoint = vehicle.route[vehicle.currentIndex + 1];
+  
+  if (!nextPoint) {
+    return { lat: currentPoint.lat, lng: currentPoint.lng };
+  }
+
+  // Interpolate between current and next point
+  const now = Date.now();
+  const progress = (now - currentPoint.timestamp) / (nextPoint.timestamp - currentPoint.timestamp);
+  
+  return {
+    lat: currentPoint.lat + (nextPoint.lat - currentPoint.lat) * progress,
+    lng: currentPoint.lng + (nextPoint.lng - currentPoint.lng) * progress
+  };
+}
+
+// NEW FUNCTION: Frontend API call to reroute vehicle
+export async function rerouteVehicleAPI(
+  vehicleId: string, 
+  destination: { lat: number; lng: number; name: string } | string
+): Promise<{ ok: boolean; message: string; route?: RoutePoint[] }> {
+  try {
+    const payload = typeof destination === 'string' 
+      ? { address: destination }
+      : { destination };
+
+    const response = await fetch(`http://localhost:8000/api/v1/vehicles/${vehicleId}/reroute`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`✅ Vehicle ${vehicleId} rerouted successfully:`, data.message);
+    return data;
+  } catch (error) {
+    console.error(`❌ Failed to reroute vehicle ${vehicleId}:`, error);
+    throw new Error(`Failed to reroute vehicle: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// NEW FUNCTION: Snap route coordinates to actual roads
+async function snapToRoads(coordinates: [number, number][]): Promise<[number, number][]> {
+  try {
+    // Google Maps Roads API can only handle 100 points at a time
+    const maxPoints = 100;
+    const snappedCoords: [number, number][] = [];
+    
+    for (let i = 0; i < coordinates.length; i += maxPoints) {
+      const batch = coordinates.slice(i, i + maxPoints);
+      const path = batch.map(coord => `${coord[0]},${coord[1]}`).join('|');
+      
+      const response = await fetch(
+        `https://roads.googleapis.com/v1/snapToRoads?path=${path}&interpolate=true&key=${apiKeys.googleMaps}`
+      );
+      
+      if (!response.ok) {
+        console.warn('Roads API failed, using original coordinates');
+        return coordinates;
+      }
+      
+      const data = await response.json();
+      
+      if (data.snappedPoints) {
+        const batchSnapped = data.snappedPoints.map((point: { location: { latitude: number; longitude: number } }) => [
+          point.location.latitude,
+          point.location.longitude
+        ] as [number, number]);
+        snappedCoords.push(...batchSnapped);
+      }
+    }
+    
+    return snappedCoords.length > 0 ? snappedCoords : coordinates;
+  } catch (error) {
+    console.warn('Roads API error, using original coordinates:', error);
+    return coordinates;
+  }
 } 
