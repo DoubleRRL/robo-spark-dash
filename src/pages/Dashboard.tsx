@@ -117,6 +117,15 @@ export default function Dashboard() {
     };
   });
 
+  // Calculate status counts for filter dropdowns
+  const statusCounts = {
+    available: realVehicles.filter(v => v.status === "available").length,
+    "en-route": realVehicles.filter(v => v.status === "en-route").length,
+    pickup: realVehicles.filter(v => v.status === "pickup").length,
+    dropoff: realVehicles.filter(v => v.status === "dropoff").length,
+    charging: realVehicles.filter(v => v.status === "charging").length,
+  };
+
   // Apply filters
   const filteredVehicles = realVehicles.filter(vehicle => {
     const statusMatch = statusFilter === "all" || vehicle.status === statusFilter;
@@ -212,12 +221,12 @@ export default function Dashboard() {
                     <SelectValue placeholder="All Statuses" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="available">Available</SelectItem>
-                    <SelectItem value="en-route">En Route</SelectItem>
-                    <SelectItem value="pickup">Pickup</SelectItem>
-                    <SelectItem value="dropoff">Dropoff</SelectItem>
-                    <SelectItem value="charging">Charging</SelectItem>
+                    <SelectItem value="all">All Statuses ({realVehicles.length})</SelectItem>
+                    <SelectItem value="available">Available ({statusCounts.available})</SelectItem>
+                    <SelectItem value="en-route">En Route ({statusCounts["en-route"]})</SelectItem>
+                    <SelectItem value="pickup">Pickup ({statusCounts.pickup})</SelectItem>
+                    <SelectItem value="dropoff">Dropoff ({statusCounts.dropoff})</SelectItem>
+                    <SelectItem value="charging">Charging ({statusCounts.charging})</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -272,8 +281,7 @@ export default function Dashboard() {
                 <VehicleStatusCard
                   key={vehicle.vehicleId}
                   vehicleId={vehicle.vehicleId}
-                  status={vehicle.status === "en-route" || vehicle.status === "pickup" || vehicle.status === "dropoff" ? "active" : 
-                          vehicle.status === "charging" ? "charging" : "idle"}
+                  status={vehicle.status}
                   battery={vehicle.battery}
                   location={vehicle.location}
                   lastTrip={vehicle.lastTrip}
