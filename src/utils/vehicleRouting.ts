@@ -152,12 +152,12 @@ export interface VehicleRoute {
   speed: number; // mph
 }
 
-// Calculate fare based on distance (2.69 to 14.20 range)
+// Calculate fare based on distance (2.69 to 14.00 range)
 export function calculateFare(distanceMiles: number): number {
   const baseFare = 2.69;
   const perMileRate = 1.50;
   const fare = baseFare + (distanceMiles * perMileRate);
-  return Math.min(fare, 14.20); // Cap at 14.20
+  return Math.min(fare, 14.00); // Cap at 14.00
 }
 
 // Get Google Maps route between two points

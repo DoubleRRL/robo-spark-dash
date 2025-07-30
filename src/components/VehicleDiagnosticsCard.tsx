@@ -43,7 +43,8 @@ export default function VehicleDiagnosticsCard({ diagnostics, vehicleType = 'def
   const estimatedRange = (battery / 100) * specs.epaRange;
   const needsCharging = battery <= 20;
   const cameraOccluded = diagnostics.cameraOcclusion === 'bad';
-  const fsdErrors = diagnostics.fsdErrors || 0;
+  // 25% chance to have 1-4 FSD errors on instance launch
+  const fsdErrors = Math.random() < 0.25 ? Math.floor(Math.random() * 4) + 1 : 0;
 
   return (
     <Card className="bg-gradient-card border-border h-full flex flex-col">
@@ -161,7 +162,7 @@ export default function VehicleDiagnosticsCard({ diagnostics, vehicleType = 'def
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <AlertTriangle className="h-4 w-4 text-yellow-500" />
-            <h4 className="text-sm font-medium">FSD Errors</h4>
+            <h4 className="text-sm font-medium">FSD Actions for Review</h4>
           </div>
           <div className="space-y-2">
             <div className="flex justify-between items-center">

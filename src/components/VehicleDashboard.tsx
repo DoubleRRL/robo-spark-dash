@@ -90,7 +90,7 @@ export const VehicleDashboard: React.FC = () => {
                 <Battery className="h-4 w-4 text-blue-500" />
                 <span className="text-sm">Battery</span>
                 <Progress value={vehicle.battery} className="flex-1" />
-                <span className="text-sm font-mono">{vehicle.battery}%</span>
+                <span className="text-sm font-mono">{Math.round(vehicle.battery)}%</span>
               </div>
 
               {/* Speed */}

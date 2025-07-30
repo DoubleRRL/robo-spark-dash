@@ -152,7 +152,7 @@ export default function MapComponent({ vehicles, selectedVehicle }: MapComponent
             <span>OSRM Ready</span>
           </div>
           <div className="mt-1 text-xs">
-            {vehicles.length} vehicles active
+            {vehicles.length} vehicles
           </div>
         </div>
       </div>

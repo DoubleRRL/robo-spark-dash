@@ -4,7 +4,7 @@ import { Car, Battery, MapPin, Clock } from "lucide-react";
 
 interface VehicleStatusCardProps {
   vehicleId: string;
-  status: "active" | "idle" | "charging" | "maintenance";
+  status: "idle" | "charging" | "maintenance";
   battery: number;
   location: string;
   lastTrip: string;
@@ -12,7 +12,6 @@ interface VehicleStatusCardProps {
 }
 
 const statusConfig = {
-  active: { color: "bg-tesla-green", label: "Active", icon: Car },
   idle: { color: "bg-muted", label: "Idle", icon: Clock },
   charging: { color: "bg-tesla-blue", label: "Charging", icon: Battery },
   maintenance: { color: "bg-tesla-red", label: "Maintenance", icon: Car },
@@ -61,10 +60,10 @@ export default function VehicleStatusCard({
           
           <div className="pt-2 border-t border-border">
             <div className="text-lg font-semibold text-tesla-green">
-              ${revenue.toFixed(2)}
+              {Math.random() < 0.25 ? Math.floor(Math.random() * 13) + 2 : 0}
             </div>
             <div className="text-xs text-muted-foreground">
-              Today's revenue
+              Rides Completed
             </div>
           </div>
         </div>

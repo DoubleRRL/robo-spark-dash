@@ -57,7 +57,7 @@ io.of('/vehicles').on('connection', socket => {
         data.lng,
         data.progress || 0,
         // Make sure battery is an integer
-        Math.round(data.battery) || 100,
+        Math.round(data.battery || 100),
         // Make sure speed is an integer
         Math.round(data.speed) || 0,
         data.eta || '0 min',

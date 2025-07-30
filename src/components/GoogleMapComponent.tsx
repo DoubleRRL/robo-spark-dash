@@ -144,11 +144,11 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
     setMap(null);
   };
 
-  // Pan map to selected vehicle
+  // Pan map to selected vehicle (but keep fixed zoom)
   useEffect(() => {
     if (map && selectedVehicleData) {
       map.panTo({ lat: selectedVehicleData.lat, lng: selectedVehicleData.lng });
-      map.setZoom(15);
+      // Keep the current zoom level instead of setting to 15
     }
   }, [map, selectedVehicleData]);
 
@@ -619,7 +619,7 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
       {/* Bottom Map Controls */}
       <div className="absolute bottom-4 right-4 z-10 bg-background/90 backdrop-blur-sm rounded-lg p-3 border border-border">
         <div className="text-xs text-muted-foreground">
-          {vehicles.length} vehicles active
+          {vehicles.length} vehicles
         </div>
       </div>
       
