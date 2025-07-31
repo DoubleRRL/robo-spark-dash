@@ -1,1 +1,37 @@
+<<<<<<< HEAD
 node_modules
+=======
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# API Keys file
+src/config/api-keys.ts
+>>>>>>> d8e3b95daf4fad6ec2e3b35953a287c8c33ec68d
