@@ -38,15 +38,19 @@ class RealisticVehicleSimulator {
     // Initialize vehicles at fixed locations
     this.vehicles = initializeVehicleRoutes();
     
+    // Log vehicle types for debugging
+    console.log('🚗 Realistic Vehicle Simulator Started');
+    console.log(`📊 ${this.vehicles.length} vehicles initialized`);
+    this.vehicles.forEach(vehicle => {
+      console.log(`🚗 ${vehicle.id}: ${vehicle.type}`);
+    });
+    
     // Start update loop
     this.interval = setInterval(() => {
       this.updateVehicles();
       this.generateNewTrips();
       this.sendUpdates();
-    }, 2000); // Update every 2 seconds
-    
-    console.log('🚗 Realistic Vehicle Simulator Started');
-    console.log(`📊 ${this.vehicles.length} vehicles initialized`);
+    }, 3000); // Update every 3 seconds to reduce jittering
   }
 
   private updateVehicles() {
@@ -215,20 +219,29 @@ class RealisticVehicleSimulator {
       // Generate realistic diagnostic data
       const diagnostics = this.generateDiagnostics(vehicle);
       
+      const vehicleType = this.getVehicleType(vehicle.id);
       const update = {
         id: vehicle.id,
-        type: this.getVehicleType(vehicle.id),
+        type: vehicleType,
         status: vehicle.status,
         lat: vehicle.lat,
         lng: vehicle.lng,
         progress: vehicle.route.length > 0 ? 
           (vehicle.currentIndex / vehicle.route.length) * 100 : 0,
-        battery: Math.round(vehicle.battery),
+        battery: Math.floor(vehicle.battery),
         speed: Math.round(vehicle.speed),
         eta: this.calculateETA(vehicle),
         heading: this.calculateHeading(vehicle),
-        diagnostics: diagnostics
+        diagnostics: diagnostics,
+        route: vehicle.route, // Add route information
+        pickup: vehicle.pickup,
+        destination: vehicle.destination
       };
+      
+      // Debug log the vehicle type
+      if (Math.random() < 0.1) { // Log 10% of updates to avoid spam
+        console.log(`🚗 Vehicle ${vehicle.id} type: ${vehicleType}`);
+      }
       
       this.socket.emit('vehicle-update', update);
     });

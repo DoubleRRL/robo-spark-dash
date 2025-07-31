@@ -3,13 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, MapPin, User, AlertCircle, Car, Search } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { generateActiveTrips } from "../utils/riderData";
 
 interface RideRequest {
   id: string;
   passenger: string;
-  pickup: string;
-  destination: string;
   pickupLocation: {
     name: string;
     address: string;
@@ -37,19 +34,7 @@ interface RideRequestsCardProps {
   availableVehicles: Array<{ id: string; type: string; battery: number; lat: number; lng: number }>;
 }
 
-export default function RideRequestsCard({ requests: externalRequests, onAssignVehicle, availableVehicles }: RideRequestsCardProps) {
-  // Generate 18-25 riders if no external requests are provided
-  const [generatedRequests] = useState<RideRequest[]>(
-    () => externalRequests || generateActiveTrips(Math.floor(Math.random() * 8) + 18) // 18-25 riders
-  );
-
-  // Use either the external requests or our generated ones
-  const requests = externalRequests || generatedRequests;
-  
-  // Filter requests by status for display
-  const pendingRequests = requests.filter(r => r.status === "ride requested");
-  const enRouteRequests = requests.filter(r => r.status === "en-route");
-  const droppingOffRequests = requests.filter(r => r.status === "dropping off");
+export default function RideRequestsCard({ requests = [], onAssignVehicle, availableVehicles }: RideRequestsCardProps) {
   
   // Filter type
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -101,7 +86,7 @@ export default function RideRequestsCard({ requests: externalRequests, onAssignV
               className="text-xs px-2 h-7"
             >
               <Search className="h-3 w-3 mr-1" />
-              Pending ({pendingRequests.length})
+              Pending ({requests.filter(r => r.status === 'ride requested').length})
             </Button>
             <Button 
               variant={statusFilter === "en-route" ? "default" : "outline"} 
@@ -110,7 +95,7 @@ export default function RideRequestsCard({ requests: externalRequests, onAssignV
               className="text-xs px-2 h-7"
             >
               <Car className="h-3 w-3 mr-1" />
-              En Route ({enRouteRequests.length})
+              En Route ({requests.filter(r => r.status === 'en-route').length})
             </Button>
           </div>
         </div>
@@ -157,11 +142,11 @@ export default function RideRequestsCard({ requests: externalRequests, onAssignV
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center text-foreground">
                       <MapPin className="mr-2 h-3 w-3 text-foreground" />
-                      <span className="truncate">{request.pickup}</span>
+                      <span className="truncate">{request.pickupLocation.name}</span>
                     </div>
                     <div className="flex items-center text-foreground">
                       <MapPin className="mr-2 h-3 w-3 text-foreground" />
-                      <span className="truncate">{request.destination}</span>
+                      <span className="truncate">{request.destinationLocation.name}</span>
                     </div>
                     <div className="flex items-center text-muted-foreground">
                       <Clock className="mr-2 h-3 w-3" />

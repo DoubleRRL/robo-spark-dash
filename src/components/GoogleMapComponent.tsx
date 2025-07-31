@@ -16,6 +16,7 @@ interface Vehicle {
   pickup?: { lat: number; lng: number; name: string };
   destination?: { lat: number; lng: number; name: string };
   eta?: string; // Added for ETA
+  diagnostics?: any; // Add diagnostics field
 }
 
 interface GoogleMapComponentProps {
@@ -91,6 +92,7 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
   const [mapInitialized, setMapInitialized] = useState(false);
   const [addressInput, setAddressInput] = useState("");
   const [selectedVehicleData, setSelectedVehicleData] = useState<Vehicle | null>(null);
+  const [cameraTracking, setCameraTracking] = useState(false);
   
   // Add directions state
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
@@ -144,13 +146,26 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
     setMap(null);
   };
 
-  // Pan map to selected vehicle (but keep fixed zoom)
+  // Smooth camera tracking for selected vehicle
   useEffect(() => {
-    if (map && selectedVehicleData) {
-      map.panTo({ lat: selectedVehicleData.lat, lng: selectedVehicleData.lng });
-      // Keep the current zoom level instead of setting to 15
+    if (map && selectedVehicleData && cameraTracking && !infoWindow?.isOpen) {
+      // Use smooth panning with easing for better tracking
+      const currentCenter = map.getCenter();
+      const targetPosition = { lat: selectedVehicleData.lat, lng: selectedVehicleData.lng };
+      
+      // Only pan if the vehicle has moved significantly
+      if (currentCenter) {
+        const distance = google.maps.geometry.spherical.computeDistanceBetween(
+          currentCenter,
+          targetPosition
+        );
+        
+        if (distance > 50) { // Only pan if vehicle moved more than 50 meters
+          map.panTo(targetPosition);
+        }
+      }
     }
-  }, [map, selectedVehicleData]);
+  }, [map, selectedVehicleData, cameraTracking, infoWindow?.isOpen]);
 
   // New effect to calculate directions for selected vehicle
   useEffect(() => {
@@ -235,20 +250,21 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
     // Determine the correct image file based on vehicle type
     let iconUrl = '/cybertruck.png'; // default
     
-    if (vehicle.type === 'cybertruck') {
+    if (vehicle.type === 'Cybertruck') {
       iconUrl = '/cybertruck.png';
-    } else if (vehicle.type === 'modely') {
+    } else if (vehicle.type === 'Model Y') {
       iconUrl = '/model y.png';
-    } else if (vehicle.type === 'modelx') {
+    } else if (vehicle.type === 'Model X') {
       iconUrl = '/model x.png';
     }
 
-    // Size based on selection status
-    const size = selectedVehicle === vehicle.id ? 40 : 32;
+    // Size based on selection status - made much larger with proper aspect ratio
+    const size = selectedVehicle === vehicle.id ? 80 : 64;
 
     return {
       url: iconUrl,
-      scaledSize: new google.maps.Size(size, size),
+      scaledSize: new google.maps.Size(size, size), // Keep 1:1 aspect ratio
+      anchor: new google.maps.Point(size / 2, size / 2), // Center the icon
     };
   };
 
@@ -277,37 +293,81 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
       vehicle.status === 'en-route-to-charging' ? 'Going to Charge' :
       vehicle.status || 'Unknown';
 
+    // Enhanced info window with diagnostics data
+    const diagnostics = vehicle.diagnostics || {};
+    const specs = {
+      'modelx': { epaRange: 348, tirePressure: 42 },
+      'modely': { epaRange: 330, tirePressure: 42 },
+      'cybertruck': { epaRange: 320, tirePressure: 50 },
+      'default': { epaRange: 330, tirePressure: 42 }
+    };
+    const vehicleSpecs = specs[vehicle.type as keyof typeof specs] || specs.default;
+    const estimatedRange = (vehicle.battery / 100) * vehicleSpecs.epaRange;
+    const needsCharging = vehicle.battery <= 20;
+    const cameraOccluded = diagnostics.cameraOcclusion === 'bad';
+    const fsdErrors = diagnostics.fsdErrors || 0;
+    const motorTemp = diagnostics.motorTemperature || 0;
+    
     setInfoWindow({
       position: { lat: vehicle.lat, lng: vehicle.lng },
       content: `
-        <div style="min-width: 220px; padding: 5px;">
-          <h3 style="margin: 0 0 8px 0; font-weight: bold; color: #3b82f6;">${vehicle.id}</h3>
-          <div style="margin-bottom: 8px; display: flex; align-items: center;">
-            <span style="font-weight: bold; margin-right: 5px;">Type:</span>
-            <span>${vehicleTypeDisplay}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <div style="display: flex; align-items: center;">
-              <span style="font-weight: bold; margin-right: 5px;">Status:</span>
-              <span>${statusDisplay}</span>
+        <div style="min-width: 280px; padding: 8px; font-family: system-ui, -apple-system, sans-serif;">
+          <h3 style="margin: 0 0 12px 0; font-weight: bold; color: #3b82f6; font-size: 16px;">${vehicle.id}</h3>
+          
+          <!-- Basic Info -->
+          <div style="margin-bottom: 12px; padding: 8px; background: #f8fafc; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-weight: 600; color: #374151;">Type:</span>
+              <span style="color: #6b7280;">${vehicleTypeDisplay}</span>
             </div>
-            <div style="display: flex; align-items: center;">
-              <span style="font-weight: bold; margin-right: 5px;">Battery:</span>
-              <span>${Math.round(vehicle.battery)}%</span>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-weight: 600; color: #374151;">Status:</span>
+              <span style="color: #6b7280;">${statusDisplay}</span>
             </div>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <div style="display: flex; align-items: center;">
-              <span style="font-weight: bold; margin-right: 5px;">Speed:</span>
-              <span>${Math.round(vehicle.speed || 0)} mph</span>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-weight: 600; color: #374151;">Speed:</span>
+              <span style="color: #6b7280;">${Math.round(vehicle.speed || 0)} mph</span>
             </div>
-            <div style="display: flex; align-items: center;">
-              <span style="font-weight: bold; margin-right: 5px;">ETA:</span>
-              <span>${vehicle.eta || 'N/A'}</span>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="font-weight: 600; color: #374151;">ETA:</span>
+              <span style="color: #6b7280;">${vehicle.eta || 'N/A'}</span>
             </div>
           </div>
-          <div style="margin-top: 8px; font-size: 0.8em; color: #6b7280;">
-            <span>Location: ${vehicle.lat.toFixed(4)}, ${vehicle.lng.toFixed(4)}</span>
+          
+          <!-- Battery & Range -->
+          <div style="margin-bottom: 12px; padding: 8px; background: #f8fafc; border-radius: 6px;">
+            <div style="font-weight: 600; color: #374151; margin-bottom: 6px;">🔋 Battery & Range</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #6b7280; font-size: 12px;">Charge:</span>
+              <span style="font-weight: 600; color: ${needsCharging ? '#ef4444' : '#10b981'};">${Math.round(vehicle.battery)}%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #6b7280; font-size: 12px;">Range:</span>
+              <span style="font-weight: 600; color: #374151;">${estimatedRange.toFixed(0)} mi</span>
+            </div>
+            ${needsCharging ? '<div style="color: #ef4444; font-size: 12px; font-weight: 600;">⚠️ Low battery - will charge</div>' : ''}
+          </div>
+          
+          <!-- Diagnostics -->
+          <div style="margin-bottom: 12px; padding: 8px; background: #f8fafc; border-radius: 6px;">
+            <div style="font-weight: 600; color: #374151; margin-bottom: 6px;">🔧 Diagnostics</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #6b7280; font-size: 12px;">Camera:</span>
+              <span style="font-weight: 600; color: ${cameraOccluded ? '#ef4444' : '#10b981'};">${cameraOccluded ? 'OCCLUDED' : 'GOOD'}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #6b7280; font-size: 12px;">FSD Errors:</span>
+              <span style="font-weight: 600; color: ${fsdErrors > 0 ? '#f59e0b' : '#10b981'};">${fsdErrors}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #6b7280; font-size: 12px;">Motor Temp:</span>
+              <span style="font-weight: 600; color: #374151;">${motorTemp.toFixed(1)}°C</span>
+            </div>
+          </div>
+          
+          <!-- Location -->
+          <div style="font-size: 11px; color: #9ca3af; text-align: center; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+            ${vehicle.lat.toFixed(4)}, ${vehicle.lng.toFixed(4)}
           </div>
         </div>
       `,
@@ -539,14 +599,16 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
             key={`pickup-${request.id}`}
             position={{ lat: request.pickupLocation.lat, lng: request.pickupLocation.lng }}
             icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              fillColor: '#f97316', // Orange
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-              scale: 5,
+              url: '/ride-pin.svg',
+              scaledSize: new google.maps.Size(200, 267), // Made even bigger
+              anchor: new google.maps.Point(100, 267), // Anchor at bottom center
             }}
-            title={`Pickup: ${request.pickupLocation.name}`}
+            title={`Pickup: ${request.pickupLocation.name} - ${request.passenger}`}
+            onClick={() => {
+              console.log('Pickup clicked:', request);
+              // Could add pickup selection logic here
+            }}
+            zIndex={1000} // Ensure pins are on top
           />
         ))}
 
@@ -556,14 +618,16 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
             key={`dest-${request.id}`}
             position={{ lat: request.destinationLocation.lat, lng: request.destinationLocation.lng }}
             icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              fillColor: '#a855f7', // Purple
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-              scale: 5,
+              url: '/destination-pin.svg',
+              scaledSize: new google.maps.Size(200, 267), // Made even bigger
+              anchor: new google.maps.Point(100, 267), // Anchor at bottom center
             }}
-            title={`Destination: ${request.destinationLocation.name}`}
+            title={`Destination: ${request.destinationLocation.name} - ${request.passenger}`}
+            onClick={() => {
+              console.log('Destination clicked:', request);
+              // Could add destination selection logic here
+            }}
+            zIndex={1000} // Ensure pins are on top
           />
         ))}
 
@@ -618,9 +682,21 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
 
       {/* Bottom Map Controls */}
       <div className="absolute bottom-4 right-4 z-10 bg-background/90 backdrop-blur-sm rounded-lg p-3 border border-border">
-        <div className="text-xs text-muted-foreground">
-          {vehicles.length} vehicles
+        <div className="text-xs text-muted-foreground mb-2">
+          {vehicles.length} vehicles • {rideRequests?.length || 0} requests
         </div>
+        {selectedVehicleData && (
+          <button
+            onClick={() => setCameraTracking(!cameraTracking)}
+            className={`text-xs px-3 py-1 rounded-md transition-colors ${
+              cameraTracking 
+                ? 'bg-tesla-blue text-white' 
+                : 'bg-background/50 text-muted-foreground hover:bg-background/70'
+            }`}
+          >
+            {cameraTracking ? '🔄 Tracking ON' : '📍 Tracking OFF'}
+          </button>
+        )}
       </div>
       
       {/* Address Input (only when vehicle is selected) */}

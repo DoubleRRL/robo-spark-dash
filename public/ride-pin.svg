@@ -1,0 +1,17 @@
+<svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Pin shadow -->
+  <ellipse cx="12" cy="30" rx="8" ry="2" fill="rgba(0,0,0,0.2)"/>
+  
+  <!-- Pin body -->
+  <path d="M12 0C5.373 0 0 5.373 0 12c0 8.5 12 20 12 20s12-11.5 12-20c0-6.627-5.373-12-12-12z" fill="#ef4444"/>
+  
+  <!-- Pin highlight -->
+  <path d="M12 2C6.486 2 2 6.486 2 12c0 7.5 10 18 10 18s10-10.5 10-18c0-5.514-4.486-10-10-10z" fill="#dc2626"/>
+  
+  <!-- Pin center dot -->
+  <circle cx="12" cy="12" r="4" fill="white"/>
+  <circle cx="12" cy="12" r="2" fill="#dc2626"/>
+  
+  <!-- Pin shine effect -->
+  <path d="M8 8c0-2.209 1.791-4 4-4s4 1.791 4 4-1.791 4-4 4-4-1.791-4-4z" fill="rgba(255,255,255,0.3)"/>
+</svg> 

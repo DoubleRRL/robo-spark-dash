@@ -150,12 +150,13 @@ export interface VehicleRoute {
   status: 'available' | 'busy' | 'charging' | 'en-route-to-charging' | 'idle';
   battery: number;
   speed: number; // mph
+  type: string; // Add type field
 }
 
 // Calculate fare based on distance (2.69 to 14.00 range)
 export function calculateFare(distanceMiles: number): number {
   const baseFare = 2.69;
-  const perMileRate = 0.20; // $0.20 per mile
+  const perMileRate = 0.25; // $0.25 per mile
   const fare = baseFare + (distanceMiles * perMileRate);
   return Math.min(fare, 14.00); // Cap at 14.00
 }
@@ -292,34 +293,71 @@ function createStraightLineRoute(
   endLng: number
 ): RoutePoint[] {
   const routePoints: RoutePoint[] = [];
-  const numPoints = 10; // More points for smoother movement
+  const numPoints = 20; // More points for smoother movement
   const duration = 15 * 60 * 1000; // 15 minutes in milliseconds
   
   // Make sure start and end points are within Compton
   const startPoint = constrainToCompton(startLat, startLng);
   const endPoint = constrainToCompton(endLat, endLng);
   
-  console.log(`🔄 Creating route from (${startPoint.lat.toFixed(4)}, ${startPoint.lng.toFixed(4)}) to (${endPoint.lat.toFixed(4)}, ${endPoint.lng.toFixed(4)})`);
+  console.log(`🔄 Creating fallback route from (${startPoint.lat.toFixed(4)}, ${startPoint.lng.toFixed(4)}) to (${endPoint.lat.toFixed(4)}, ${endPoint.lng.toFixed(4)})`);
   
-  for (let i = 0; i <= numPoints; i++) {
-    const progress = i / numPoints;
+  // Create a more realistic path that follows major streets
+  // Use waypoints to simulate street following
+  const waypoints = [];
+  
+  // Add intermediate waypoints to simulate street routing
+  const latDiff = endPoint.lat - startPoint.lat;
+  const lngDiff = endPoint.lng - startPoint.lng;
+  
+  // Create 2-3 waypoints to simulate street turns
+  const numWaypoints = 2 + Math.floor(Math.random() * 2); // 2-3 waypoints
+  
+  for (let i = 1; i <= numWaypoints; i++) {
+    const waypointProgress = i / (numWaypoints + 1);
     
-    // Use cubic bezier curve for more realistic path
-    const t = progress;
-    const lat = startPoint.lat + (endPoint.lat - startPoint.lat) * t + Math.sin(t * Math.PI) * 0.001 * (Math.random() - 0.5);
-    const lng = startPoint.lng + (endPoint.lng - startPoint.lng) * t + Math.sin(t * Math.PI) * 0.001 * (Math.random() - 0.5);
+    // Add some variation to simulate street routing
+    const baseLat = startPoint.lat + latDiff * waypointProgress;
+    const baseLng = startPoint.lng + lngDiff * waypointProgress;
     
-    // Ensure point is within Compton polygon
-    const constrainedPoint = constrainToCompton(lat, lng);
+    // Add small perpendicular offset to simulate street turns
+    const offset = 0.001 * (Math.random() - 0.5);
+    const waypointLat = baseLat + offset;
+    const waypointLng = baseLng + offset;
     
-    routePoints.push({
-      lat: constrainedPoint.lat,
-      lng: constrainedPoint.lng,
-      timestamp: Date.now() + (progress * duration)
-    });
+    waypoints.push(constrainToCompton(waypointLat, waypointLng));
   }
   
-  console.log(`📏 Created fallback route with ${routePoints.length} points, all within Compton boundary`);
+  // Build route through waypoints
+  const allPoints = [startPoint, ...waypoints, endPoint];
+  
+  for (let segment = 0; segment < allPoints.length - 1; segment++) {
+    const segmentStart = allPoints[segment];
+    const segmentEnd = allPoints[segment + 1];
+    const segmentPoints = Math.ceil(numPoints / (allPoints.length - 1));
+    
+    for (let i = 0; i <= segmentPoints; i++) {
+      const progress = i / segmentPoints;
+      const t = progress;
+      
+      // Linear interpolation between waypoints (more realistic than curves)
+      const lat = segmentStart.lat + (segmentEnd.lat - segmentStart.lat) * t;
+      const lng = segmentStart.lng + (segmentEnd.lng - segmentStart.lng) * t;
+      
+      // Ensure point is within Compton polygon
+      const constrainedPoint = constrainToCompton(lat, lng);
+      
+      const timestamp = Date.now() + ((segment * segmentPoints + i) / numPoints) * duration;
+      
+      routePoints.push({
+        lat: constrainedPoint.lat,
+        lng: constrainedPoint.lng,
+        timestamp: timestamp
+      });
+    }
+  }
+  
+  console.log(`📏 Created fallback route with ${routePoints.length} points and ${waypoints.length} waypoints, all within Compton boundary`);
   return routePoints;
 }
 
@@ -327,6 +365,12 @@ function createStraightLineRoute(
 export function initializeVehicleRoutes(): VehicleRoute[] {
   return VEHICLE_START_LOCATIONS.map((startLocation, index) => {
     const vehicleId = `vehicle-${String(index + 1).padStart(3, '0')}`;
+    
+    // Determine vehicle type based on index
+    let vehicleType: string;
+    if (index < 5) vehicleType = 'cybertruck';
+    else if (index < 10) vehicleType = 'modely';
+    else vehicleType = 'modelx';
     
     return {
       id: vehicleId,
@@ -340,7 +384,8 @@ export function initializeVehicleRoutes(): VehicleRoute[] {
       estimatedDuration: 0,
       status: 'available',
       battery: Math.floor(85 + Math.random() * 15), // 85-100% (integer only)
-      speed: 0
+      speed: 0,
+      type: vehicleType // Add type field
     };
   });
 }

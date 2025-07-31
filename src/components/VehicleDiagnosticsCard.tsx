@@ -73,7 +73,7 @@ export default function VehicleDiagnosticsCard({ diagnostics, vehicleType = 'def
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground">Charge Level</span>
-              <span className="text-sm font-medium">{battery}%</span>
+              <span className="text-sm font-medium">{Math.floor(battery)}%</span>
             </div>
             <Progress value={battery} className="h-2" />
             <div className="flex justify-between items-center">

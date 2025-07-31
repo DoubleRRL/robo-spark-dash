@@ -9,21 +9,15 @@ import VehicleStatusCard from '../components/VehicleStatusCard';
 import ActiveTripsCard from '../components/ActiveTripsCard';
 import RideRequestsCard from '../components/RideRequestsCard';
 import GoogleMapComponent from '../components/GoogleMapComponent';
-import { firstNames, lastNames, generateActiveTrips } from '../utils/riderData';
+
 import { comptonAddresses } from '../utils/comptonAddresses';
 import VehicleDiagnosticsCard from '../components/VehicleDiagnosticsCard';
 
-// Generate random active trips
-const allTrips = generateActiveTrips(8);
-const activeTrips = allTrips.filter(trip => trip.status === "en-route" || trip.status === "dropping off");
-const rideRequests = allTrips.filter(trip => trip.status === "ride requested").map(request => ({
-  ...request,
-  requestTime: `${Math.floor(Math.random() * 10) + 1} min ago`
-}));
+
 
 export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const { isConnected, vehicles, lastUpdate } = useSocket();
+  const { isConnected, vehicles, lastUpdate, trips } = useSocket();
   
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -34,30 +28,17 @@ export default function Dashboard() {
   console.log('Total vehicles received:', vehicles.length);
   console.log('Vehicle IDs:', vehicles.map(v => v.id));
   console.log('🔍 Raw vehicle data:', vehicles.slice(0, 3)); // Log first 3 vehicles for debugging
+  
+  // Debug: log vehicle types
+  if (vehicles.length > 0) {
+    console.log('🔍 Vehicle types from socket:', vehicles.map(v => ({ id: v.id, type: v.type })));
+  }
   const [avgWaitTime] = useState((Math.random() * 5 + 2).toFixed(1)); // Static on launch
 
-  // Generate ride data with proper en-route/busy vehicle counts
-  const [rideData] = useState(() => {
-    // Generate 18-25 total requests
-    const totalRequests = Math.floor(Math.random() * 8) + 18; // 18-25
-    
-    // Determine how many of each type: 20-30% en-route, 10-15% dropping off, rest pending
-    const enRouteCount = Math.floor(totalRequests * (0.2 + Math.random() * 0.1)); // 20-30%
-    const droppingOffCount = Math.floor(totalRequests * (0.1 + Math.random() * 0.05)); // 10-15%
-    const pendingCount = totalRequests - enRouteCount - droppingOffCount;
-    
-    console.log(`Generated ride counts: ${enRouteCount} en-route, ${droppingOffCount} dropping off, ${pendingCount} pending`);
-    
-    return {
-      enRouteCount,
-      droppingOffCount,
-      pendingCount,
-      totalCount: totalRequests
-    };
-  });
+
 
   // Vehicle type mapping function - FIX: use type field from socket data
-  const getVehicleDisplayName = (vehicle: any) => {
+  const getVehicleDisplayName = (vehicle: { id?: string; vehicleId?: string; type?: string }) => {
     // First try the type field from socket data
     if (vehicle.type) return vehicle.type;
     
@@ -143,6 +124,34 @@ export default function Dashboard() {
 
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
 
+  // Transform vehicles for GoogleMapComponent with proper route format
+  const mapVehicles = vehicles.map(vehicle => ({
+    id: vehicle.id,
+    lat: vehicle.lat,
+    lng: vehicle.lng,
+    status: vehicle.status,
+    battery: vehicle.battery,
+    type: vehicle.type,
+    speed: vehicle.speed,
+    route: vehicle.route?.map((point, index) => ({
+      lat: point.lat,
+      lng: point.lng,
+      timestamp: Date.now() + (index * 30000) // Add timestamp for compatibility
+    })),
+    currentIndex: vehicle.currentIndex,
+    pickup: vehicle.pickupLocation ? {
+      lat: vehicle.pickupLocation.lat,
+      lng: vehicle.pickupLocation.lng,
+      name: vehicle.pickupLocation.address || 'Pickup Location'
+    } : undefined,
+    destination: vehicle.destination ? {
+      lat: vehicle.destination.lat,
+      lng: vehicle.destination.lng,
+      name: vehicle.destination.address || 'Destination'
+    } : undefined,
+    eta: vehicle.eta
+  }));
+
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Top Header */}
@@ -152,7 +161,7 @@ export default function Dashboard() {
             Tesla Robotaxi Control Center
           </h1>
           <Badge variant="secondary" className="bg-tesla-green/20 text-tesla-green">
-            {rideData.enRouteCount + rideData.droppingOffCount} Active
+            {trips.filter(t => t.status === 'en-route' || t.status === 'dropping off').length} Active
           </Badge>
         </div>
         <div className="flex items-center space-x-2">
@@ -192,16 +201,13 @@ export default function Dashboard() {
               </div>
               <div className="bg-background/50 rounded-lg p-3 border border-border">
                 <h4 className="text-xs font-medium text-muted-foreground">Active Trips</h4>
-                <div className="text-2xl font-bold text-foreground">{rideData.enRouteCount + rideData.droppingOffCount}</div>
+                <div className="text-2xl font-bold text-foreground">{trips.filter(t => t.status === 'en-route' || t.status === 'dropping off').length}</div>
               </div>
               <div className="bg-background/50 rounded-lg p-3 border border-border">
                 <h4 className="text-xs font-medium text-muted-foreground">Avg Wait Time</h4>
                 <div className="text-2xl font-bold text-foreground">{avgWaitTime} <span className="text-sm font-normal">min</span></div>
               </div>
-              <div className="bg-background/50 rounded-lg p-3 border border-border">
-                <h4 className="text-xs font-medium text-muted-foreground">Daily Revenue</h4>
-                <div className="text-2xl font-bold text-tesla-green">${(totalRevenue).toFixed(2)}</div>
-              </div>
+
             </div>
           </div>
 
@@ -286,6 +292,8 @@ export default function Dashboard() {
                   location={vehicle.location}
                   lastTrip={vehicle.lastTrip}
                   revenue={0}
+                  isSelected={selectedVehicle === vehicle.vehicleId}
+                  onSelect={setSelectedVehicle}
                 />
               ))}
             </div>
@@ -296,11 +304,12 @@ export default function Dashboard() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Map */}
           <div className="flex-1 relative">
-            <GoogleMapComponent
-              vehicles={vehicles}
-              selectedVehicle={selectedVehicle}
-              onVehicleSelect={setSelectedVehicle}
-            />
+                    <GoogleMapComponent
+          vehicles={mapVehicles}
+          selectedVehicle={selectedVehicle}
+          onVehicleSelect={setSelectedVehicle}
+          rideRequests={trips}
+        />
           </div>
         </div>
         
@@ -320,23 +329,13 @@ export default function Dashboard() {
           
           {/* Active Trips */}
           <div className="p-4 border-b border-border">
-            <ActiveTripsCard
-              trips={Array.from({ length: rideData.enRouteCount + rideData.droppingOffCount }, (_, i) => ({
-                id: `trip-${i + 1}`,
-                passenger: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
-                pickup: comptonAddresses[Math.floor(Math.random() * comptonAddresses.length)].address,
-                destination: comptonAddresses[Math.floor(Math.random() * comptonAddresses.length)].address,
-                duration: `${Math.floor(Math.random() * 20) + 5} min`,
-                fare: Math.floor(Math.random() * 30) + 10,
-                status: i < rideData.enRouteCount ? "en-route" : "dropping off",
-                mileage: Math.floor(Math.random() * 10) + 1
-              }))}
-            />
+            <ActiveTripsCard trips={trips} />
           </div>
           
           {/* Ride Requests */}
           <div className="flex-1 p-4 overflow-y-auto">
-            <RideRequestsCard 
+                        <RideRequestsCard 
+              requests={trips.filter(t => t.status === 'ride requested')}
               availableVehicles={vehicles.filter(v => v.status === 'available').map(v => ({
                 id: v.id,
                 type: v.type || 'default',

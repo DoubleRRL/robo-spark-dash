@@ -5,8 +5,7 @@ import { Clock, MapPin, User, DollarSign } from "lucide-react";
 interface Trip {
   id: string;
   passenger: string;
-  pickup: string;
-  destination: string;
+
   duration: string;
   fare: number;
   status: "en-route" | "dropping off";
@@ -72,11 +71,11 @@ export default function ActiveTripsCard({ trips }: ActiveTripsCardProps) {
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center text-muted-foreground">
                     <MapPin className="mr-2 h-3 w-3" />
-                    <span className="truncate">{trip.pickup}</span>
+                    <span className="truncate">{trip.pickupLocation.name}</span>
                   </div>
                   <div className="flex items-center text-muted-foreground">
                     <MapPin className="mr-2 h-3 w-3" />
-                    <span className="truncate">{trip.destination}</span>
+                    <span className="truncate">{trip.destinationLocation.name}</span>
                   </div>
                   <div className="flex items-center justify-between pt-2">
                     <div className="flex items-center text-muted-foreground">

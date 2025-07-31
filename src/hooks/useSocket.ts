@@ -27,7 +27,27 @@ interface VehicleUpdate {
   currentIndex?: number;
   pickupLocation?: Location;
   destination?: Location;
-  diagnostics?: any; // Add diagnostics field
+  diagnostics?: Record<string, unknown>; // Add diagnostics field
+}
+
+interface TripUpdate {
+  id: string;
+  pickupLocation: {
+    name: string;
+    address: string;
+    lat: number;
+    lng: number;
+    type: string;
+  };
+  destinationLocation: {
+    name: string;
+    address: string;
+    lat: number;
+    lng: number;
+    type: string;
+  };
+  passenger: string;
+  status: string;
 }
 
 interface UseSocketReturn {
@@ -35,12 +55,14 @@ interface UseSocketReturn {
   isConnected: boolean;
   vehicles: VehicleUpdate[];
   lastUpdate: VehicleUpdate | null;
+  trips: TripUpdate[];
 }
 
 export const useSocket = (): UseSocketReturn => {
   const [isConnected, setIsConnected] = useState(false);
   const [vehicles, setVehicles] = useState<VehicleUpdate[]>([]);
   const [lastUpdate, setLastUpdate] = useState<VehicleUpdate | null>(null);
+  const [trips, setTrips] = useState<TripUpdate[]>([]);
   const socketRef = useRef<Socket | null>(null);
   const vehiclesRef = useRef<VehicleUpdate[]>([]);
 
@@ -96,6 +118,12 @@ export const useSocket = (): UseSocketReturn => {
       });
     });
 
+    // trip update events
+    socket.on('trip-updates', (data: TripUpdate[]) => {
+      console.log('📍 received trip updates:', data.length, 'trips');
+      setTrips(data);
+    });
+
     // cleanup on unmount
     return () => {
       socket.disconnect();
@@ -107,5 +135,6 @@ export const useSocket = (): UseSocketReturn => {
     isConnected,
     vehicles,
     lastUpdate,
+    trips,
   };
 }; 

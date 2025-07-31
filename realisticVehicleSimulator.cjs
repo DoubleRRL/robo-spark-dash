@@ -23,6 +23,14 @@ function getRandomAddress() {
   return comptonAddresses[Math.floor(Math.random() * comptonAddresses.length)];
 }
 
+// Get vehicle type based on vehicle ID
+function getVehicleType(vehicleId) {
+  const vehicleNumber = parseInt(vehicleId.replace('vehicle-', ''));
+  if (vehicleNumber <= 5) return 'Cybertruck';
+  if (vehicleNumber <= 10) return 'Model Y';
+  return 'Model X';
+}
+
 // Generate basic diagnostics
 function generateVehicleDiagnostics(vehicleId, vehicle) {
   return {
@@ -495,6 +503,8 @@ class RealisticVehicleSimulator {
   sendUpdates() {
     if (!this.socket) return;
     console.log(`📡 Sending updates for ${this.vehicles.length} vehicles...`);
+    
+    // Send vehicle updates
     this.vehicles.forEach(vehicle => {
       // Ensure vehicle is within Compton before sending update
       const constrained = constrainToComptonBoundary(vehicle.lat, vehicle.lng);
@@ -502,7 +512,7 @@ class RealisticVehicleSimulator {
       const diagnostics = generateVehicleDiagnostics(vehicle.id, vehicle);
       const updatePayload = {
         id: vehicle.id,
-        type: vehicle.id.includes('cybertruck') ? 'Cybertruck' : vehicle.id.includes('modely') ? 'Model Y' : 'Model X',
+        type: getVehicleType(vehicle.id),
         status: vehicle.status,
         lat: constrained.lat,
         lng: constrained.lng,
@@ -515,6 +525,38 @@ class RealisticVehicleSimulator {
       console.log(`🚗 Sending update for ${vehicle.id}: status=${vehicle.status}, lat=${constrained.lat.toFixed(4)}`);
       this.socket.emit('vehicle-update', updatePayload);
     });
+    
+    // Send trip data for pickup icons
+    const activeTrips = this.vehicles
+      .filter(v => v.status === 'picking-up' || v.status === 'en-route')
+      .map(vehicle => {
+        const pickup = vehicle.pickup || getRandomAddress();
+        const destination = vehicle.destination || getRandomAddress();
+        return {
+          id: vehicle.id,
+          pickupLocation: {
+            name: pickup.name || pickup.address,
+            address: pickup.address,
+            lat: pickup.lat,
+            lng: pickup.lng,
+            type: pickup.type || 'pickup'
+          },
+          destinationLocation: {
+            name: destination.name || destination.address,
+            address: destination.address,
+            lat: destination.lat,
+            lng: destination.lng,
+            type: destination.type || 'destination'
+          },
+          passenger: `Passenger-${Math.floor(Math.random() * 1000)}`,
+          status: vehicle.status === 'picking-up' ? 'ride requested' : 'en-route'
+        };
+      });
+    
+    if (activeTrips.length > 0) {
+      console.log(`📍 Sending ${activeTrips.length} active trips for pickup icons`);
+      this.socket.emit('trip-updates', activeTrips);
+    }
   }
 
   stop() {

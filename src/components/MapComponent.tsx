@@ -7,6 +7,9 @@ interface Vehicle {
   lng: number;
   status: string;
   battery: number;
+  route?: Array<{lat: number; lng: number; timestamp: number}>;
+  pickup?: {lat: number; lng: number; name: string};
+  destination?: {lat: number; lng: number; name: string};
 }
 
 interface MapComponentProps {
@@ -88,8 +91,25 @@ export default function MapComponent({ vehicles, selectedVehicle }: MapComponent
       svg.appendChild(landmarkGroup);
     });
 
-    // Draw vehicles
+    // Draw vehicles and their routes
     vehicles.forEach(vehicle => {
+      // Draw route line if vehicle has a route
+      if (vehicle.route && vehicle.route.length > 0) {
+        const routePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const routeCoords = vehicle.route.map((point, index) => {
+          const x = ((point.lng + 118.235) / 0.05) * 800;
+          const y = ((33.896 - point.lat) / 0.04) * 600;
+          return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+        }).join(' ');
+        
+        routePath.setAttribute('d', routeCoords);
+        routePath.setAttribute('fill', 'none');
+        routePath.setAttribute('stroke', 'rgba(59, 130, 246, 0.6)');
+        routePath.setAttribute('stroke-width', '2');
+        routePath.setAttribute('stroke-dasharray', '5,5');
+        svg.appendChild(routePath);
+      }
+      
       const x = ((vehicle.lng + 118.235) / 0.05) * 800;
       const y = ((33.896 - vehicle.lat) / 0.04) * 600;
       

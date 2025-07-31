@@ -51,7 +51,7 @@ io.of('/vehicles').on('connection', socket => {
           heading = $10
       `, [
         data.id,
-        data.id.includes('cybertruck') ? 'cybertruck' : data.id.includes('modely') ? 'modely' : 'modelx',
+        data.type || (data.id.includes('cybertruck') ? 'cybertruck' : data.id.includes('modely') ? 'modely' : 'modelx'),
         data.status || 'available',
         data.lat,
         data.lng,
