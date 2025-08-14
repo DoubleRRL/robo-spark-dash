@@ -6,7 +6,7 @@ import { apiKeys } from './api-keys';
 export const mapsConfig = {
   googleMaps: {
     // Get API key from api-keys.ts or fall back to env variable if available
-    apiKey: apiKeys.googleMaps || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    apiKey: apiKeys.googleMaps,
     // Default center coordinates (Compton, CA)
     defaultCenter: {
       lat: 33.8958, 

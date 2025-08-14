@@ -67,8 +67,8 @@ A comprehensive autonomous vehicle fleet management dashboard for Tesla robotaxi
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/robo-spark-dash.git
-   cd robo-spark-dash
+   git clone https://github.com/your-username/your-repo.git
+   cd your-repo
    ```
 
 2. **Set up Google Maps API key**
@@ -117,8 +117,7 @@ A comprehensive autonomous vehicle fleet management dashboard for Tesla robotaxi
   - Color-coded by status (blue=driving, green=charging, gray=available)
   - Size scaling for selected vehicles
 - **Route Visualization**: 
-  - Street-following routes using Google Maps Directions API
-  - Fallback polyline if Directions API fails
+  - Street-following routes using Google Maps Directions API (Google-only)
   - Click vehicles to see their planned routes
 - **Info Windows**: 
   - Vehicle type, status, battery (whole numbers), speed, ETA, location
@@ -258,7 +257,7 @@ A comprehensive autonomous vehicle fleet management dashboard for Tesla robotaxi
 
 ### Project Structure
 ```
-robo-spark-dash/
+project/
 ├── src/
 │   ├── components/          # React components
 │   │   ├── GoogleMapComponent.tsx  # Google Maps integration
@@ -284,9 +283,9 @@ robo-spark-dash/
 - `backend/src/index.ts` - Express server
 
 ### API Key Management
-- **Primary**: `.env` file with `GOOGLE_MAPS_API_KEY`
-- **Fallback**: `src/config/api-keys.ts` (git-ignored)
+- **Primary**: `.env` file with `GOOGLE_MAPS_API_KEY` (also used as `VITE_GOOGLE_MAPS_API_KEY` for frontend)
 - **Example**: `src/config/api-keys.example.ts` for reference
+- Note: Routing is Google-only; no local fallbacks
 
 ### Adding New Features
 1. Create component in `src/components/`

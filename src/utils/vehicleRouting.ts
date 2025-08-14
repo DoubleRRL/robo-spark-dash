@@ -76,31 +76,43 @@ export function isWithinComptonBounds(lat: number, lng: number): boolean {
 
 // Constrain a point to be within the Compton polygon
 export function constrainToCompton(lat: number, lng: number): {lat: number, lng: number} {
-  // First check if already in polygon
+  // If already inside polygon, return as-is
   if (isPointInCompton(lat, lng)) {
     return { lat, lng };
   }
-  
-  // If not in polygon, find closest point in polygon
-  // This is a simplified approach - find the closest known safe point
-  let closestPoint = VEHICLE_START_LOCATIONS[0];
-  let minDistance = Number.MAX_VALUE;
-  
-  for (const location of VEHICLE_START_LOCATIONS) {
-    if (isPointInCompton(location.lat, location.lng)) {
-      const distance = Math.sqrt(
-        Math.pow(location.lat - lat, 2) + 
-        Math.pow(location.lng - lng, 2)
-      );
-      
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestPoint = location;
-      }
+
+  // Compute closest point on polygon edges (lat/lng treated as planar for small area)
+  let closestLat = COMPTON_POLYGON[0][0];
+  let closestLng = COMPTON_POLYGON[0][1];
+  let minDistSq = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < COMPTON_POLYGON.length; i++) {
+    const aLat = COMPTON_POLYGON[i][0];
+    const aLng = COMPTON_POLYGON[i][1];
+    const j = (i + 1) % COMPTON_POLYGON.length;
+    const bLat = COMPTON_POLYGON[j][0];
+    const bLng = COMPTON_POLYGON[j][1];
+
+    const abLat = bLat - aLat;
+    const abLng = bLng - aLng;
+    const apLat = lat - aLat;
+    const apLng = lng - aLng;
+    const abLenSq = abLat * abLat + abLng * abLng || 1e-12;
+    let t = (apLat * abLat + apLng * abLng) / abLenSq;
+    t = Math.max(0, Math.min(1, t));
+    const projLat = aLat + t * abLat;
+    const projLng = aLng + t * abLng;
+    const dLat = lat - projLat;
+    const dLng = lng - projLng;
+    const distSq = dLat * dLat + dLng * dLng;
+    if (distSq < minDistSq) {
+      minDistSq = distSq;
+      closestLat = projLat;
+      closestLng = projLng;
     }
   }
-  
-  return { lat: closestPoint.lat, lng: closestPoint.lng };
+
+  return { lat: closestLat, lng: closestLng };
 }
 
 // Vehicle starting locations (fixed within Compton boundary)
@@ -161,131 +173,61 @@ export function calculateFare(distanceMiles: number): number {
   return Math.min(fare, 14.00); // Cap at 14.00
 }
 
-// Get Google Maps route between two points
+// Build an internal route between two points (no external services)
 export async function getOSRMRoute(
   startLat: number, 
   startLng: number, 
   endLat: number, 
   endLng: number
 ): Promise<RoutePoint[]> {
-  try {
-    console.log(`🔄 Fetching Google Maps route from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
-    
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/directions/json?origin=${startLat},${startLng}&destination=${endLat},${endLng}&mode=driving&avoid=highways|tolls|ferries&units=imperial&alternatives=true&key=${apiKeys.googleMaps}`
-    );
-    
-    if (!response.ok) {
-      throw new Error(`Google Maps route request failed: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    console.log(`📊 Google Maps response:`, data);
-    
-    if (data.routes && data.routes[0]) {
-      const route = data.routes[0];
-      const duration = route.legs[0].duration.value; // seconds
-      
-      // Use detailed route steps instead of overview polyline
-      const coordinates: [number, number][] = [];
-      
-      // Extract coordinates from each step in the route
-      route.legs[0].steps.forEach((step: { polyline?: { points: string } }) => {
-        if (step.polyline && step.polyline.points) {
-          const stepCoords = decodePolyline(step.polyline.points);
-          coordinates.push(...stepCoords);
-        }
-      });
-      
-      // Remove duplicates and ensure we have start and end points
-      const uniqueCoords = coordinates.filter((coord, index, arr) => {
-        if (index === 0) return true;
-        const prev = arr[index - 1];
-        const distance = Math.sqrt(
-          Math.pow(coord[0] - prev[0], 2) + Math.pow(coord[1] - prev[1], 2)
-        );
-        return distance > 0.00005; // Keep more points for smoother street following
-      });
-      
-      console.log(`✅ Google Maps route found with ${uniqueCoords.length} detailed points, duration: ${duration}s`);
-      
-      // Snap coordinates to actual roads for better street following
-      let finalCoords = uniqueCoords;
-      try {
-        const snappedCoords = await snapToRoads(uniqueCoords);
-        if (snappedCoords.length > 0) {
-          finalCoords = snappedCoords;
-          console.log(`🛣️ Snapped route to roads: ${snappedCoords.length} points`);
-        } else {
-          console.log(`⚠️ Road snapping failed, using original route`);
-        }
-      } catch (error) {
-        console.log(`⚠️ Road snapping error, using original route:`, error);
-      }
-      
-      // Convert coordinates to RoutePoint array with timestamps
-      const routePoints: RoutePoint[] = [];
-      const timePerPoint = duration / (finalCoords.length - 1);
-      
-      finalCoords.forEach((coord: [number, number], index: number) => {
-        routePoints.push({
-          lat: coord[0],
-          lng: coord[1],
-          timestamp: Date.now() + (index * timePerPoint * 1000)
-        });
-      });
-      
-      return routePoints;
-    }
-    
-    throw new Error('No route found in Google Maps response');
-  } catch (error) {
-    console.error('Google Maps routing error:', error);
-    console.log(`🔄 Falling back to straight line route`);
-    
-    // Fallback to straight line route with intermediate points
-    return createStraightLineRoute(startLat, startLng, endLat, endLng);
-  }
-}
-
-// Decode Google polyline format
-function decodePolyline(encoded: string): [number, number][] {
-  const poly: [number, number][] = [];
-  let index = 0;
-  const len = encoded.length;
-  let lat = 0, lng = 0;
-
-  while (index < len) {
-    let shift = 0, result = 0;
-
-    do {
-      const b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (result >= 0x20);
-
-    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
-    lat += dlat;
-
-    shift = 0;
-    result = 0;
-
-    do {
-      const b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (result >= 0x20);
-
-    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
-    lng += dlng;
-
-    poly.push([lat / 1E5, lng / 1E5]);
+  // Use Google Maps Directions API for routing (no local fallback)
+  console.log(`🔄 Fetching Google Directions from (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) to (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`);
+  const key = apiKeys.googleMaps;
+  if (!key) {
+    throw new Error('Missing Google Maps API key');
   }
 
-  return poly;
+  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${startLat},${startLng}&destination=${endLat},${endLng}&mode=driving&units=imperial&alternatives=false&key=${key}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Google Directions error: HTTP ${response.status}`);
+  }
+  const data = await response.json();
+  if (!data.routes || !data.routes[0] || !data.routes[0].legs || !data.routes[0].legs[0]) {
+    throw new Error('Google Directions returned no route');
+  }
+
+  const duration = data.routes[0].legs[0].duration.value; // seconds
+  const coords: [number, number][] = [];
+  // Prefer step polylines for fidelity
+  data.routes[0].legs[0].steps.forEach((step: { polyline?: { points: string } }) => {
+    if (step.polyline?.points) {
+      const pts = decodePolyline(step.polyline.points);
+      coords.push(...pts);
+    }
+  });
+  if (coords.length === 0 && data.routes[0].overview_polyline?.points) {
+    coords.push(...decodePolyline(data.routes[0].overview_polyline.points));
+  }
+  if (coords.length === 0) throw new Error('No polyline points in Google Directions');
+
+  // Use Directions polyline coordinates directly (Google-only; no local fallback or snapping)
+  const finalCoords = coords;
+
+  const routePoints: RoutePoint[] = [];
+  const timePerPoint = duration / Math.max(finalCoords.length - 1, 1);
+  finalCoords.forEach((c, i) => {
+    const constrained = constrainToCompton(c[0], c[1]);
+    routePoints.push({
+      lat: constrained.lat,
+      lng: constrained.lng,
+      timestamp: Date.now() + i * timePerPoint * 1000,
+    });
+  });
+  return routePoints;
 }
 
-// Fallback: create straight-line route when OSRM is unavailable
+// Self-contained straight/segmented route builder
 function createStraightLineRoute(
   startLat: number, 
   startLng: number, 
@@ -594,40 +536,4 @@ export async function rerouteVehicleAPI(
   }
 }
 
-// NEW FUNCTION: Snap route coordinates to actual roads
-async function snapToRoads(coordinates: [number, number][]): Promise<[number, number][]> {
-  try {
-    // Google Maps Roads API can only handle 100 points at a time
-    const maxPoints = 100;
-    const snappedCoords: [number, number][] = [];
-    
-    for (let i = 0; i < coordinates.length; i += maxPoints) {
-      const batch = coordinates.slice(i, i + maxPoints);
-      const path = batch.map(coord => `${coord[0]},${coord[1]}`).join('|');
-      
-      const response = await fetch(
-        `https://roads.googleapis.com/v1/snapToRoads?path=${path}&interpolate=true&key=${apiKeys.googleMaps}`
-      );
-      
-      if (!response.ok) {
-        console.warn('Roads API failed, using original coordinates');
-        return coordinates;
-      }
-      
-      const data = await response.json();
-      
-      if (data.snappedPoints) {
-        const batchSnapped = data.snappedPoints.map((point: { location: { latitude: number; longitude: number } }) => [
-          point.location.latitude,
-          point.location.longitude
-        ] as [number, number]);
-        snappedCoords.push(...batchSnapped);
-      }
-    }
-    
-    return snappedCoords.length > 0 ? snappedCoords : coordinates;
-  } catch (error) {
-    console.warn('Roads API error, using original coordinates:', error);
-    return coordinates;
-  }
-} 
+// No road snapping; route points are used as generated

@@ -303,14 +303,14 @@ export default function Dashboard() {
         {/* Main Content - Map and Stats */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Map */}
-          <div className="flex-1 relative">
-                    <GoogleMapComponent
-          vehicles={mapVehicles}
-          selectedVehicle={selectedVehicle}
-          onVehicleSelect={setSelectedVehicle}
-          rideRequests={trips}
-        />
-          </div>
+           <div className="flex-1 relative">
+             <GoogleMapComponent
+               vehicles={mapVehicles}
+               selectedVehicle={selectedVehicle}
+               onVehicleSelect={setSelectedVehicle}
+               rideRequests={trips}
+             />
+           </div>
         </div>
         
         {/* Right Sidebar - Trips and Requests */}

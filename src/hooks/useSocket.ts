@@ -28,6 +28,7 @@ interface VehicleUpdate {
   pickupLocation?: Location;
   destination?: Location;
   diagnostics?: Record<string, unknown>; // Add diagnostics field
+  updatedAt?: number;
 }
 
 interface TripUpdate {
@@ -65,6 +66,7 @@ export const useSocket = (): UseSocketReturn => {
   const [trips, setTrips] = useState<TripUpdate[]>([]);
   const socketRef = useRef<Socket | null>(null);
   const vehiclesRef = useRef<VehicleUpdate[]>([]);
+  const lastTimestampsRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     console.log('🔌 Initializing socket connection...');
@@ -95,6 +97,13 @@ export const useSocket = (): UseSocketReturn => {
     socket.on('vehicle-update', (data: VehicleUpdate) => {
       console.log('🔄 received vehicle update:', data.id, 'status:', data.status, 'lat:', data.lat, 'lng:', data.lng);
       setLastUpdate(data);
+      const nowTs = typeof data.updatedAt === 'number' ? data.updatedAt : Date.now();
+      const lastTs = lastTimestampsRef.current[data.id] || 0;
+      if (nowTs < lastTs) {
+        console.log(`⏭️  Ignoring stale update for ${data.id}: ${nowTs} < ${lastTs}`);
+        return;
+      }
+      lastTimestampsRef.current[data.id] = nowTs;
       
       setVehicles(prev => {
         console.log('📊 updating vehicles state, current count:', prev.length);

@@ -169,7 +169,7 @@ export default function MapComponent({ vehicles, selectedVehicle }: MapComponent
         <div className="text-xs text-muted-foreground">
           <div className="flex items-center space-x-2">
             <MapPin className="h-3 w-3" />
-            <span>OSRM Ready</span>
+            <span>Routing Ready</span>
           </div>
           <div className="mt-1 text-xs">
             {vehicles.length} vehicles

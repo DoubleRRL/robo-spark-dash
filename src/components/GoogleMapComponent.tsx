@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Polygon, DirectionsRenderer, Polyline } from '@react-google-maps/api';
 import { mapsConfig } from '../config/maps';
-import { COMPTON_POLYGON } from '../utils/vehicleRouting';
+import { COMPTON_POLYGON, constrainToCompton } from '../utils/vehicleRouting';
 
 interface Vehicle {
   id: string;
@@ -77,7 +77,7 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: mapsConfig.googleMaps.apiKey,
-    libraries: ['places']
+    libraries: ['places', 'geometry']
   });
 
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -245,7 +245,20 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
     );
   }, [map, selectedVehicleData]);
 
-  // Create icon for vehicle based on type and status
+  // Compute a friendly display name aligned with fleet cards
+  const getVehicleDisplayNameById = (vehicleId: string): string => {
+    const vehicleNumber = parseInt(vehicleId.replace('vehicle-', ''));
+    let model = 'Vehicle';
+    if (vehicleNumber <= 5) model = 'Cybertruck';
+    else if (vehicleNumber <= 10) model = 'Model Y';
+    else model = 'Model X';
+    return `${model} #${String(vehicleNumber).padStart(3, '0')}`;
+  };
+
+  // Constrain a position to the Compton polygon geofence
+  const clampToPolygon = (lat: number, lng: number) => constrainToCompton(lat, lng);
+
+  // Create icon for vehicle based on type and status, preserving aspect ratio
   const getVehicleIcon = (vehicle: Vehicle): google.maps.Icon => {
     // Determine the correct image file based on vehicle type
     let iconUrl = '/cybertruck.png'; // default
@@ -258,13 +271,14 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
       iconUrl = '/model x.png';
     }
 
-    // Size based on selection status - made much larger with proper aspect ratio
-    const size = selectedVehicle === vehicle.id ? 80 : 64;
+    // Keep icons reasonably sized and proportional
+    const baseHeight = selectedVehicle === vehicle.id ? 56 : 44;
+    const baseWidth = Math.round(baseHeight * 1.8);
 
     return {
       url: iconUrl,
-      scaledSize: new google.maps.Size(size, size), // Keep 1:1 aspect ratio
-      anchor: new google.maps.Point(size / 2, size / 2), // Center the icon
+      scaledSize: new google.maps.Size(baseWidth, baseHeight),
+      anchor: new google.maps.Point(Math.round(baseWidth / 2), Math.round(baseHeight / 2)),
     };
   };
 
@@ -309,10 +323,10 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
     const motorTemp = diagnostics.motorTemperature || 0;
     
     setInfoWindow({
-      position: { lat: vehicle.lat, lng: vehicle.lng },
+      position: clampToPolygon(vehicle.lat, vehicle.lng),
       content: `
         <div style="min-width: 280px; padding: 8px; font-family: system-ui, -apple-system, sans-serif;">
-          <h3 style="margin: 0 0 12px 0; font-weight: bold; color: #3b82f6; font-size: 16px;">${vehicle.id}</h3>
+          <h3 style="margin: 0 0 12px 0; font-weight: bold; color: #3b82f6; font-size: 16px;">${getVehicleDisplayNameById(vehicle.id)}</h3>
           
           <!-- Basic Info -->
           <div style="margin-bottom: 12px; padding: 8px; background: #f8fafc; border-radius: 6px;">
@@ -594,40 +608,76 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
         ))}
 
         {/* Ride Requests - Pickup locations */}
-        {rideRequests?.map((request) => (
+        {rideRequests?.filter(r => r.status === 'ride requested').map((request) => (
           <Marker
             key={`pickup-${request.id}`}
-            position={{ lat: request.pickupLocation.lat, lng: request.pickupLocation.lng }}
+            position={clampToPolygon(request.pickupLocation.lat, request.pickupLocation.lng)}
             icon={{
               url: '/ride-pin.svg',
-              scaledSize: new google.maps.Size(200, 267), // Made even bigger
-              anchor: new google.maps.Point(100, 267), // Anchor at bottom center
+              scaledSize: new google.maps.Size(40, 53),
+              anchor: new google.maps.Point(20, 53),
             }}
             title={`Pickup: ${request.pickupLocation.name} - ${request.passenger}`}
             onClick={() => {
-              console.log('Pickup clicked:', request);
-              // Could add pickup selection logic here
+              setInfoWindow({
+                position: clampToPolygon(request.pickupLocation.lat, request.pickupLocation.lng),
+                content: `
+                  <div style="min-width: 260px; padding: 8px; font-family: system-ui, -apple-system, sans-serif;">
+                    <h3 style="margin: 0 0 8px 0; font-weight: bold; color: #f59e0b; font-size: 14px;">Pickup Request</h3>
+                    <div style="margin-bottom: 6px;">
+                      <div style="font-size: 12px; color: #6b7280;">Passenger</div>
+                      <div style="font-weight: 600; color: #374151;">${request.passenger}</div>
+                    </div>
+                    <div style="margin-bottom: 6px;">
+                      <div style="font-size: 12px; color: #6b7280;">Pickup</div>
+                      <div style="font-weight: 600; color: #374151;">${request.pickupLocation.name}</div>
+                      <div style="font-size: 12px; color: #6b7280;">${request.pickupLocation.address}</div>
+                    </div>
+                    <div>
+                      <div style="font-size: 12px; color: #6b7280;">Destination</div>
+                      <div style="font-weight: 600; color: #374151;">${request.destinationLocation.name}</div>
+                    </div>
+                  </div>
+                `,
+                isOpen: true
+              });
             }}
-            zIndex={1000} // Ensure pins are on top
+            zIndex={1000}
           />
         ))}
 
         {/* Ride Requests - Destination locations */}
-        {rideRequests?.map((request) => (
+        {rideRequests?.filter(r => r.status === 'ride requested').map((request) => (
           <Marker
             key={`dest-${request.id}`}
-            position={{ lat: request.destinationLocation.lat, lng: request.destinationLocation.lng }}
+            position={clampToPolygon(request.destinationLocation.lat, request.destinationLocation.lng)}
             icon={{
               url: '/destination-pin.svg',
-              scaledSize: new google.maps.Size(200, 267), // Made even bigger
-              anchor: new google.maps.Point(100, 267), // Anchor at bottom center
+              scaledSize: new google.maps.Size(40, 53),
+              anchor: new google.maps.Point(20, 53),
             }}
             title={`Destination: ${request.destinationLocation.name} - ${request.passenger}`}
             onClick={() => {
-              console.log('Destination clicked:', request);
-              // Could add destination selection logic here
+              setInfoWindow({
+                position: clampToPolygon(request.destinationLocation.lat, request.destinationLocation.lng),
+                content: `
+                  <div style="min-width: 260px; padding: 8px; font-family: system-ui, -apple-system, sans-serif;">
+                    <h3 style="margin: 0 0 8px 0; font-weight: bold; color: #8b5cf6; font-size: 14px;">Destination</h3>
+                    <div style="margin-bottom: 6px;">
+                      <div style="font-size: 12px; color: #6b7280;">Passenger</div>
+                      <div style="font-weight: 600; color: #374151;">${request.passenger}</div>
+                    </div>
+                    <div>
+                      <div style="font-size: 12px; color: #6b7280;">Destination</div>
+                      <div style="font-weight: 600; color: #374151;">${request.destinationLocation.name}</div>
+                      <div style="font-size: 12px; color: #6b7280;">${request.destinationLocation.address}</div>
+                    </div>
+                  </div>
+                `,
+                isOpen: true
+              });
             }}
-            zIndex={1000} // Ensure pins are on top
+            zIndex={1000}
           />
         ))}
 
@@ -635,9 +685,10 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
         {vehicles.map((vehicle) => (
           <Marker
             key={vehicle.id}
-            position={{ lat: vehicle.lat, lng: vehicle.lng }}
+            position={clampToPolygon(vehicle.lat, vehicle.lng)}
             onClick={() => handleVehicleClick(vehicle)}
             icon={getVehicleIcon(vehicle)}
+            title={getVehicleDisplayNameById(vehicle.id)}
             zIndex={selectedVehicle === vehicle.id ? 1000 : undefined}
           />
         ))}
@@ -704,7 +755,7 @@ export default function GoogleMapComponent({ vehicles, selectedVehicle, onVehicl
         <div className="absolute bottom-4 left-4 z-10 bg-background/90 backdrop-blur-sm rounded-lg p-3 border border-border">
           <div className="flex flex-col space-y-2">
             <label htmlFor="address-input" className="text-xs text-foreground">
-              Send {selectedVehicleData.id} to:
+              Send {getVehicleDisplayNameById(selectedVehicleData.id)} to:
             </label>
             <div className="flex space-x-2">
               <input
