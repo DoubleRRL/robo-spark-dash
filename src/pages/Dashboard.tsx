@@ -152,6 +152,34 @@ export default function Dashboard() {
     eta: vehicle.eta
   }));
 
+  // Map trips from socket to ActiveTripsCard and RideRequestsCard shapes
+  // Prefer deriving active trips from current vehicle statuses in case we reloaded mid-trip
+  const activeTrips = vehicles
+    .filter(v => v.status === 'en-route' || v.status === 'dropping-off')
+    .map(v => ({
+      id: `trip-${v.id}`,
+      passenger: 'Passenger',
+      duration: '—',
+      fare: 0,
+      status: (v.status === 'dropping-off' ? 'dropping off' : 'en-route') as 'en-route' | 'dropping off',
+      mileage: 0,
+      pickupLocation: v.pickupLocation ? { ...v.pickupLocation, type: v.pickupLocation.type || 'poi' } as any : undefined,
+      destinationLocation: v.destination ? { ...v.destination, type: v.destination.type || 'poi' } as any : undefined,
+    }));
+
+  const rideRequestTrips = trips
+    .filter(t => t.status === 'ride requested')
+    .map(t => ({
+      id: t.id,
+      passenger: t.passenger,
+      pickupLocation: t.pickupLocation,
+      destinationLocation: t.destinationLocation,
+      status: 'ride requested' as const,
+      mileage: 0,
+      duration: '—',
+      fare: 0,
+    }));
+
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Top Header */}
@@ -304,12 +332,12 @@ export default function Dashboard() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Map */}
            <div className="flex-1 relative">
-             <GoogleMapComponent
-               vehicles={mapVehicles}
-               selectedVehicle={selectedVehicle}
-               onVehicleSelect={setSelectedVehicle}
-               rideRequests={trips}
-             />
+              <GoogleMapComponent
+                vehicles={mapVehicles}
+                selectedVehicle={selectedVehicle}
+                onVehicleSelect={setSelectedVehicle}
+                rideRequests={trips}
+              />
            </div>
         </div>
         
@@ -329,13 +357,13 @@ export default function Dashboard() {
           
           {/* Active Trips */}
           <div className="p-4 border-b border-border">
-            <ActiveTripsCard trips={trips} />
+            <ActiveTripsCard trips={activeTrips} />
           </div>
           
           {/* Ride Requests */}
           <div className="flex-1 p-4 overflow-y-auto">
-                        <RideRequestsCard 
-              requests={trips.filter(t => t.status === 'ride requested')}
+            <RideRequestsCard 
+              requests={rideRequestTrips}
               availableVehicles={vehicles.filter(v => v.status === 'available').map(v => ({
                 id: v.id,
                 type: v.type || 'default',
@@ -344,8 +372,10 @@ export default function Dashboard() {
                 lng: v.lng
               }))}
               onAssignVehicle={(requestId, vehicleId) => {
-                console.log(`Assigning request ${requestId} to vehicle ${vehicleId}`);
-                alert(`Assigned vehicle ${vehicleId} to trip ${requestId}`);
+                const req = rideRequestTrips.find(r => r.id === requestId);
+                const passenger = req?.passenger || 'Passenger';
+                const vehicleLabel = vehicleId;
+                alert(`${passenger} assigned to ${vehicleLabel}`);
               }}
             />
           </div>

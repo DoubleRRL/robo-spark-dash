@@ -92,6 +92,18 @@ io.of('/vehicles').on('connection', socket => {
     console.log(`Broadcasting to ${clients.size} connected clients`);
     io.of('/vehicles').emit('vehicle-update', data);
   });
+
+  // relay ride requests from simulator to dashboard clients
+  socket.on('ride-requests', (data) => {
+    try {
+      console.log('Received ride requests:', Array.isArray(data) ? data.length : 0);
+      // Emit both the canonical event and a compatibility alias
+      io.of('/vehicles').emit('ride-requests', data);
+      io.of('/vehicles').emit('trip-updates', data);
+    } catch (error) {
+      console.error('Failed to relay ride requests:', error);
+    }
+  });
   
   socket.on('pull-over', rideData => {
     // log rideData (could write to db/file)

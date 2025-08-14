@@ -20,6 +20,21 @@ const comptonAddresses = [
   { name: "Compton Residential Area 3", address: "789 S Oak Ave, Compton, CA 90221", lat: 33.8800, lng: -118.1950, type: "residential" }
 ];
 
+// Generic rider names
+const FIRST_NAMES = [
+  'Alex','Jamie','Taylor','Jordan','Casey','Riley','Morgan','Avery','Cameron','Drew',
+  'Quinn','Reese','Peyton','Rowan','Elliot','Harper','Kai','Logan','Sage','Skyler'
+];
+const LAST_NAMES = [
+  'Smith','Johnson','Brown','Davis','Miller','Wilson','Moore','Taylor','Anderson','Thomas',
+  'Jackson','White','Harris','Martin','Thompson','Garcia','Martinez','Robinson','Clark','Lewis'
+];
+function randomRiderName() {
+  const first = FIRST_NAMES[Math.floor(Math.random()*FIRST_NAMES.length)];
+  const last = LAST_NAMES[Math.floor(Math.random()*LAST_NAMES.length)];
+  return `${first} ${last}`;
+}
+
 function getRandomAddress() {
   return comptonAddresses[Math.floor(Math.random() * comptonAddresses.length)];
 }
@@ -308,7 +323,7 @@ class RealisticVehicleSimulator {
         id: `req-${Date.now()}-${i}`,
         pickupLocation: { name: pickup.name, address: pickup.address, lat: pickup.lat, lng: pickup.lng, type: pickup.type },
         destinationLocation: { name: dest.name, address: dest.address, lat: dest.lat, lng: dest.lng, type: dest.type },
-        passenger: `Passenger-${Math.floor(Math.random() * 1000)}`,
+        passenger: randomRiderName(),
         status: 'ride requested'
       });
     }
@@ -356,7 +371,7 @@ class RealisticVehicleSimulator {
         id: `req-${Date.now()}`,
         pickupLocation: { name: pickup.name, address: pickup.address, lat: pickup.lat, lng: pickup.lng, type: pickup.type },
         destinationLocation: { name: dest.name, address: dest.address, lat: dest.lat, lng: dest.lng, type: dest.type },
-        passenger: `Passenger-${Math.floor(Math.random() * 1000)}`,
+        passenger: randomRiderName(),
         status: 'ride requested'
       });
       this.emitRideRequests();

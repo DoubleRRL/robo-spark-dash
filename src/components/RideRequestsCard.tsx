@@ -65,12 +65,12 @@ export default function RideRequestsCard({ requests = [], onAssignVehicle, avail
   return (
     <Card className="bg-gradient-card border-border">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-foreground flex items-center">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-lg font-semibold text-foreground flex items-center truncate min-w-0">
             <AlertCircle className="mr-2 h-5 w-5 text-orange-500" />
-            Ride Requests ({requests.length})
+            <span className="truncate">Ride Requests ({requests.length})</span>
           </CardTitle>
-          <div className="flex space-x-1">
+          <div className="flex flex-wrap gap-1 w-full sm:w-auto sm:justify-end">
             <Button 
               variant={statusFilter === "all" ? "default" : "outline"} 
               size="sm"

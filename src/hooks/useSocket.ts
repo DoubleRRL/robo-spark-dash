@@ -127,11 +127,13 @@ export const useSocket = (): UseSocketReturn => {
       });
     });
 
-    // trip update events
-    socket.on('trip-updates', (data: TripUpdate[]) => {
-      console.log('📍 received trip updates:', data.length, 'trips');
-      setTrips(data);
-    });
+    // trip update events (support both event names)
+    const handleTrips = (data: TripUpdate[]) => {
+      console.log('📍 received trip updates:', Array.isArray(data) ? data.length : 0, 'trips');
+      setTrips(Array.isArray(data) ? data : []);
+    };
+    socket.on('trip-updates', handleTrips);
+    socket.on('ride-requests', handleTrips);
 
     // cleanup on unmount
     return () => {

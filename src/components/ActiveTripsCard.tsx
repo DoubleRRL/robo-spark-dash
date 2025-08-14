@@ -63,32 +63,37 @@ export default function ActiveTripsCard({ trips }: ActiveTripsCardProps) {
                       {trip.passenger}
                     </span>
                   </div>
-                  <Badge className={`${statusConfig[trip.status].color} text-primary-foreground border-none`}>
-                    {statusConfig[trip.status].label}
-                  </Badge>
+                  {(() => {
+                    const cfg = (statusConfig as any)[trip.status] || { color: "bg-muted", label: String(trip.status || "Unknown") };
+                    return (
+                      <Badge className={`${cfg.color} text-primary-foreground border-none`}>
+                        {cfg.label}
+                      </Badge>
+                    );
+                  })()}
                 </div>
                 
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center text-muted-foreground">
                     <MapPin className="mr-2 h-3 w-3" />
-                    <span className="truncate">{trip.pickupLocation.name}</span>
+                    <span className="truncate">{trip.pickupLocation?.name || 'Unknown pickup'}</span>
                   </div>
                   <div className="flex items-center text-muted-foreground">
                     <MapPin className="mr-2 h-3 w-3" />
-                    <span className="truncate">{trip.destinationLocation.name}</span>
+                    <span className="truncate">{trip.destinationLocation?.name || 'Unknown destination'}</span>
                   </div>
                   <div className="flex items-center justify-between pt-2">
                     <div className="flex items-center text-muted-foreground">
                       <Clock className="mr-1 h-3 w-3" />
-                      {trip.duration}
+                      {trip.duration || '—'}
                     </div>
                     <div className="flex items-center text-tesla-green font-medium">
                       <DollarSign className="mr-1 h-3 w-3" />
-                      {trip.fare.toFixed(2)}
+                      {(trip.fare ?? 0).toFixed(2)}
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    Customer status: {trip.status} • {trip.mileage} miles remaining
+                    Customer status: {trip.status || 'Unknown'} • {(trip.mileage ?? 0)} miles remaining
                   </div>
                 </div>
               </div>
